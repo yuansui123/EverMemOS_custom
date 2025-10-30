@@ -275,15 +275,6 @@ def merge_single_profile(
 
     output_reasoning = new.output_reasoning if new.output_reasoning is not None else existing.output_reasoning
 
-    merged_type: List[str] = []
-    for source in (existing.type or [], new.type or []):
-        for item in source:
-            text = item.strip() if isinstance(item, str) else str(item).strip()
-            if text and text not in merged_type:
-                merged_type.append(text)
-    if not merged_type:
-        merged_type = [MemoryType.PROFILE.value]
-
     return ProfileMemory(
         memory_type=MemoryType.PROFILE,
         user_id=existing.user_id,
