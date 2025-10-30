@@ -1,19 +1,31 @@
 <div align="center">
-  <h1>EverMemOS 🧠</h1>
-  <p><strong>Empowering AI with True Memory</strong> · Enterprise-Grade Intelligent Memory System</p>
-  <p>
-    <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-blue.svg" />
-    <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-green.svg" />
-    <img alt="Status" src="https://img.shields.io/badge/Status-Production-brightgreen.svg" />
-  </p>
-  <p>
-    <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
-  </p>
+
+<h1>EverMemOS 🧠</h1>
+
+<p><strong>Make Every Conversation Built on Understanding</strong> · Enterprise-Grade Intelligent Memory System</p>
+
+<p>
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-blue.svg" />
+  <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-green.svg" />
+  <img alt="Status" src="https://img.shields.io/badge/Status-Production-brightgreen.svg" />
+</p>
+
+<p>
+  <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
+</p>
+
 </div>
 
-> Make every conversation built on understanding.
+---
 
-EverMemOS is a next-generation AI memory system designed for enterprises and organizations. It extracts, stores, and retrieves structured memories from massive conversational data, enabling AI assistants to truly understand users, groups, and business contexts. On the **LoCoMo** benchmark, our approach built upon EverMemOS achieved a reasoning accuracy of **92.3%** (evaluated by LLM-Judge), outperforming comparable methods in our evaluation.
+> 💬 **More than memory — it's foresight.**
+
+**EverMemOS** is a forward-thinking intelligent system.  
+While traditional AI memory serves merely as a "look-back" database, EverMemOS enables AI not only to "remember" what happened, but also to "understand" the meaning behind these memories and use them to guide current actions and decisions.
+
+On the **LoCoMo** benchmark, our approach built upon EverMemOS achieved a reasoning accuracy of **92.3%** (evaluated by LLM-Judge), outperforming comparable methods in our evaluation.
+
+---
 
 ## 📢 Latest Updates
 
@@ -21,10 +33,10 @@ EverMemOS is a next-generation AI memory system designed for enterprises and org
 <tr>
 <td width="100%" style="border: none;">
 
-[2025-10-28] **🎉 v1.0.0 First Stable Release!**
+**[2025-10-28] 🎉 v1.0.0 Stable Release!**
 
-- ✨ **Stable Version**: AI Memory System code is now open source!
-- 📚 **Complete Documentation**: Quick start guide and API documentation
+- ✨ **Stable Version**: AI Memory System officially open sourced  
+- 📚 **Complete Documentation**: Quick start guide and comprehensive API documentation  
 
 </td>
 </tr>
@@ -32,15 +44,39 @@ EverMemOS is a next-generation AI memory system designed for enterprises and org
 
 ---
 
-🎯 **Core Vision**: Build AI memory that never forgets, making every conversation built on previous understanding.
+## 🎯 Core Vision  
+Build AI memory that never forgets, making every conversation built on previous understanding.
 
-💡 **Unique Advantages**:
-- 🧠 **Multi-Level Memory Extraction** - Comprehensive capture of episodic memory, user profiles, and group characteristics
-- 🔍 **Intelligent Retrieval Fusion** - Keyword, vector, hybrid search + Rerank reordering
-- 💾 **Multi-Storage Architecture** - Integrated MongoDB + Elasticsearch + Milvus storage
-- 🏗️ **Layered Design** - Clear separation: Agentic → Memory → Business → Infrastructure
+---
 
-<h2 align="center">📑 Table of Contents</h2>
+## 💡 Unique Advantages
+
+### 🧠 Evidence-Based Perception  
+Beyond "retrieval," intelligent "perception": Proactively capturing deep connections between memories and tasks, enabling AI to "think thoroughly" at critical moments.
+
+> Imagine: When a user asks for "food recommendations," the AI proactively recalls "you had dental surgery two days ago" as a key piece of information, automatically adjusting suggestions to avoid unsuitable options.  
+> This is **Contextual Awareness** — enabling AI thinking to be truly built on understanding rather than isolated responses.
+
+---
+
+### 🔗 Coherent Narrative  
+Beyond "fragments," connecting "stories": Automatically linking conversation pieces to build clear thematic context, enabling AI to "truly understand."
+
+> When facing multi-threaded conversations, it naturally distinguishes between "Project A progress discussion" and "Team B strategy planning," maintaining coherent contextual logic within each theme.  
+> From scattered phrases to complete narratives, AI no longer just "understands one sentence" but "understands the whole story."
+
+---
+
+### 💾 Living Profiles  
+Beyond "records," dynamic "growth": Real-time user profile updates that get to know you better with each conversation, enabling AI to "recognize you authentically."
+
+> Every interaction subtly updates the AI's understanding of you — preferences, style, and focus points all continuously evolve.  
+> As interactions deepen, it doesn't just "remember what you said," but is "learning who you are."
+
+---
+
+<h2>📑 Table of Contents</h2>
+
 
 <div align="center">
 <table>

@@ -1,19 +1,31 @@
 <div align="center">
-  <h1>EverMemOS 🧠</h1>
-  <p><strong>让 AI 拥有真正的记忆</strong> · 企业级智能记忆系统</p>
-  <p>
-    <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-blue.svg" />
-    <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-green.svg" />
-    <img alt="Status" src="https://img.shields.io/badge/Status-Production-brightgreen.svg" />
-  </p>
-  <p>
-    <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
-  </p>
+
+<h1>EverMemOS 🧠</h1>
+
+<p><strong>每次对话，都建立在理解之上</strong> · 企业级智能记忆系统</p>
+
+<p>
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-blue.svg" />
+  <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-green.svg" />
+  <img alt="Status" src="https://img.shields.io/badge/Status-Production-brightgreen.svg" />
+</p>
+
+<p>
+  <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
+</p>
+
 </div>
 
-> 让每一次对话，都建立在理解之上。
+---
 
-**EverMemOS** 是新一代的AI记忆系统，专为企业和组织设计。它能够从海量对话数据中提取、存储和检索结构化记忆，让AI助手真正理解用户、群组和业务上下文。在 **LoCoMo** 基准测试中，我们基于 EverMemOS 的方法在 LLM-Judge 评测下实现了 **92.3%** 的推理准确率，优于我们所评测的同类方法。
+> 💬 **不止记忆，更是远见。**
+
+**EverMemOS** 是一个着眼未来的智能系统。  
+传统的 AI 记忆仅是“回顾过去”的数据库，而 EverMemOS 让 AI 不仅能“记住”发生了什么，更能“理解”这些记忆的意义，并据此指导当下的行动与决策。  
+
+在 **LoCoMo** 基准测试中，我们基于 EverMemOS 的方法在 **LLM-Judge** 评测下达到了  **92.3% 的推理准确率**，优于我们测试的同类方法。
+
+---
 
 ## 📢 最新动态
 
@@ -21,11 +33,10 @@
 <tr>
 <td width="100%" style="border: none;">
 
-**[2025-10-28]**  **🎉 v1.0.0 首个稳定版本发布！**
+**[2025-10-28] 🎉 v1.0.0 稳定版本发布！**
 
-- ✨ **稳定版本**: AI记忆系统代码开源！
-- 📚 **文档完善**: 快速开始指南和 API 文档
-
+- ✨ **稳定版本**：AI 记忆系统正式开源  
+- 📚 **文档完善**：提供快速开始指南与完整 API 说明  
 
 </td>
 </tr>
@@ -33,15 +44,39 @@
 
 ---
 
-🎯 **核心愿景**：构建永不遗忘的AI记忆，让每一次对话都建立在前序理解之上。
+## 🎯 核心愿景  
+构建永不遗忘的 AI 记忆，让每一次对话都建立在前序理解之上。
 
-💡 **独特优势**：
-- 🧠 **多层次记忆提取** - Episode记忆、用户画像、群组特征全面捕获
-- 🔍 **智能检索融合** - 关键词、向量、混合检索 + Rerank重排序
-- 💾 **多存储架构** - MongoDB + Elasticsearch + Milvus 一体化存储
-- 🏗️ **分层设计** - Agentic → Memory → Business → Infrastructure 清晰分层
+---
 
-<h2 align="center">📑 目录</h2>
+## 💡 独特优势
+
+### 🧠 感知有据  
+不止“检索”，智能“感知”：主动捕捉记忆与任务间的深层关联，让 AI 在关键时刻“想得周到”。  
+
+> 想象一下：当用户请求“推荐食物”时，AI 会主动联想到“你两天前刚做了牙科手术”这一关键信息，自动调整建议，避开不适宜的选项。  
+> 这是一种 **上下文自觉 (Contextual Awareness)** —— 让 AI 的思考真正建立在理解之上，而非孤立回应。
+
+---
+
+### 🔗 脉络有绪  
+不止“碎片”，串联“故事”：自动串联对话片段，构建清晰主题脉络，让 AI “听得明白”。  
+
+> 面对多线程对话时，它能自然地区分“A 项目的进度讨论”和“B 团队的策略规划”，并在每个主题中维持连贯的上下文逻辑。  
+> 从零散片语到完整叙事，AI 不再“听懂一句”，而是“听懂整件事”。
+
+---
+
+### 💾 画像有灵  
+不止“档案”，动态“成长”：实时更新用户画像，越聊越懂你，让 AI “认得真切”。  
+
+> 你的每一次交流都会悄然更新 AI 对你的理解——偏好、风格、关注点都在持续演化。  
+> 随着互动的深入，它不只是“记住你说过什么”，而是在“学习你是谁”。
+
+---
+
+## 📑 目录
+
 
 <div align="center">
 <table>
