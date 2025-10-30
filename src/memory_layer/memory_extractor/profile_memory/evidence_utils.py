@@ -296,7 +296,7 @@ def remove_entries_without_evidence(payload: Any, *, path: str = "user_profile")
             if cleaned is None:
                 continue
             sanitized.append(cleaned)
-        return sanitized or None
+        return sanitized
 
     return payload
 
