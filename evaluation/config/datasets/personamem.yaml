@@ -16,14 +16,17 @@ data:
 
 # Evaluation configuration
 evaluation:
-  type: "llm_judge"
+  type: "exact_match"  # PersonaMem 是选择题，使用精确匹配
   
-  llm:
-    provider: "openai"
-    model: "gpt-4o-mini"
-    api_key: "${LLM_API_KEY}"
-    base_url: "${LLM_BASE_URL:https://openrouter.ai/api/v1}"
+  # Exact match 配置
+  case_sensitive: false  # 不区分大小写
+  normalize_whitespace: true  # 规范化空白字符
+  extract_choice: true  # 从生成的答案中提取选项（如 (a), (b)）
   
-  num_runs: 3
-  filter_category: []  # No filtering
+  # PersonaMem categories: 
+  # "recall_user_shared_facts", "provide_preference_aligned_recommendations",
+  # "suggest_new_ideas", "recalling_the_reasons_behind_previous_updates",
+  # "track_full_preference_evolution", "generalizing_to_new_scenarios",
+  # "recalling_facts_mentioned_by_the_user"
+  filter_category: []  # 如需过滤，添加到列表：["suggest_new_ideas", ...]
 

@@ -2,7 +2,7 @@
 
 name: "evermemos"
 version: "1.0"
-description: "EverMemOS - Advanced episodic memory system"
+description: "EverMemOS"
 
 adapter: "evermemos"
 

@@ -28,11 +28,18 @@ class Conversation:
 
 @dataclass
 class QAPair:
-    """标准 QA 对格式"""
+    """
+    标准 QA 对格式
+    
+    注意：category 字段统一为字符串类型：
+    - LoCoMo: "1", "2", "3", "5" (原始为整数，加载时转为字符串)
+    - LongMemEval: "single-session-user", "multi-session-user"
+    - PersonaMem: "recall_user_shared_facts", "suggest_new_ideas" 等
+    """
     question_id: str
     question: str
     answer: str
-    category: Optional[int] = None
+    category: Optional[str] = None  # 统一为字符串类型
     evidence: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 

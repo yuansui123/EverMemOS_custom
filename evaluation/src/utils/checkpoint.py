@@ -16,7 +16,6 @@ from datetime import datetime
 class CheckpointManager:
     """Checkpoint 管理器
     
-    参考 evaluation_archive 的实现：
     - Stage 3 (search): 每处理完一个会话就保存检查点
     - Stage 4 (answer): 每 SAVE_INTERVAL 个问题保存一次
     """
@@ -193,9 +192,7 @@ class CheckpointManager:
     def load_add_progress(self, memcells_dir: Path, all_conv_ids: list) -> set:
         """
         加载 Add 阶段的细粒度进度（检查哪些会话已完成）
-        
-        参考 evaluation_archive/stage1_memcells_extraction.py:550-582
-        
+                
         Args:
             memcells_dir: MemCells 保存目录
             all_conv_ids: 所有会话 ID 列表
@@ -214,7 +211,8 @@ class CheckpointManager:
         print(f"\n🔍 Checking for completed conversations in: {memcells_dir}")
         
         for conv_id in all_conv_ids:
-            output_file = memcells_dir / f"{conv_id}.json"
+            # 🔥 修复：匹配 stage1 实际保存的文件名格式
+            output_file = memcells_dir / f"memcell_list_conv_{conv_id}.json"
             if output_file.exists():
                 # 验证文件有效性（非空且可解析）
                 try:

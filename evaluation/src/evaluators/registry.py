@@ -14,8 +14,8 @@ _EVALUATOR_REGISTRY: Dict[str, Type[BaseEvaluator]] = {}
 # 评估器模块映射（用于延迟加载）
 _EVALUATOR_MODULES = {
     "llm_judge": "evaluation.src.evaluators.llm_judge",
+    "exact_match": "evaluation.src.evaluators.exact_match",
     # 未来添加其他评估器：
-    # "exact_match": "evaluation.src.evaluators.exact_match",
     # "bert_score": "evaluation.src.evaluators.bert_score",
 }
 

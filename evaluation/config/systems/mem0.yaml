@@ -1,0 +1,67 @@
+# Mem0 System Configuration
+
+name: "mem0"
+version: "1.0"
+description: "Mem0"
+
+adapter: "mem0"
+
+# Mem0 API configuration
+api_key: "${MEM0_API_KEY}"
+batch_size: 5  # Number of messages to batch per API call
+max_retries: 5  # Number of retries for failed API calls
+max_content_length: 8000  # Maximum content length per message (API limit)
+
+# 数据清理配置
+# 在 add 阶段前是否清理已有数据（确保实验结果可复现）
+clean_before_add: false  # Set to true to delete all existing memories before adding new ones
+
+# Custom Instructions (optional)
+# 自定义记忆生成指令，用于指导 Mem0 如何提取和格式化记忆
+custom_instructions: |
+  Generate personal memories that follow these guidelines:
+  
+  1. Each memory should be self-contained with complete context, including:
+     - The person's name, do not use "user" while creating memories
+     - Personal details (career aspirations, hobbies, life circumstances)
+     - Emotional states and reactions
+     - Ongoing journeys or future plans
+     - Specific dates when events occurred
+  
+  2. Include meaningful personal narratives focusing on:
+     - Identity and self-acceptance journeys
+     - Family planning and parenting
+     - Creative outlets and hobbies
+     - Mental health and self-care activities
+     - Career aspirations and education goals
+     - Important life events and milestones
+  
+  3. Make each memory rich with specific details rather than general statements
+     - Include timeframes (exact dates when possible)
+     - Name specific activities (e.g., "charity race for mental health" rather than just "exercise")
+     - Include emotional context and personal growth elements
+  
+  4. Extract memories only from user messages, not incorporating assistant responses
+  
+  5. Format each memory as a paragraph with a clear narrative structure that captures the person's experience, challenges, and aspirations
+
+# ⏰ Post-Add Wait: 等待后台索引构建完成（如果需要的话）
+post_add_wait_seconds: 180  # 设置为 0 表示不等待，如发现需要可调整
+
+# LLM configuration (for answer generation)
+llm:
+  provider: "openai"
+  model: "openai/gpt-4.1-mini"
+  api_key: "${LLM_API_KEY}"
+  base_url: "${LLM_BASE_URL:https://openrouter.ai/api/v1}"
+  temperature: 0
+  max_tokens: 32768
+
+# Search configuration
+search:
+  top_k: 20
+
+# Answer configuration
+answer:
+  max_retries: 3
+

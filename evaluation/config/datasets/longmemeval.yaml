@@ -24,5 +24,7 @@ evaluation:
     base_url: "${LLM_BASE_URL:https://openrouter.ai/api/v1}"
   
   num_runs: 3
-  filter_category: []  # No filtering
+  
+  # LongMemEval categories: "single-session-user", "multi-session-user" 等
+  filter_category: []  # 如需过滤，添加到列表：["single-session-user", ...]
 

@@ -23,5 +23,7 @@ evaluation:
   num_runs: 3  # Number of judging runs per question
   
   # Filter settings
-  filter_category: [5]  # Skip questions with these categories
+  # 过滤掉指定类别的问题（统一使用字符串格式，整数也会自动转换）
+  # LoCoMo categories: "1", "2", "3", "5"（对抗性问题）
+  filter_category: [5]  # 可以使用整数或字符串，如 [5] 或 ["5"]
 

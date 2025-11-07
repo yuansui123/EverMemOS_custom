@@ -65,6 +65,24 @@ class BaseAdapter(ABC):
         """
         pass
     
+    async def prepare(self, conversations: List[Conversation], **kwargs) -> None:
+        """
+        准备阶段：在 add 之前执行的操作
+        
+        可选的准备操作，例如：
+        - 更新项目配置（如 Mem0 的 custom_instructions）
+        - 清理已有数据（如果配置了 clean_before_add）
+        - 其他系统特定的初始化
+        
+        Args:
+            conversations: 标准格式的对话列表（用于提取 user_id 等信息）
+            **kwargs: 额外参数
+        
+        Returns:
+            None
+        """
+        pass  # 默认实现：不做任何操作
+    
     def get_system_info(self) -> Dict[str, Any]:
         """
         返回系统信息（用于结果记录）
@@ -76,4 +94,20 @@ class BaseAdapter(ABC):
             "name": self.__class__.__name__,
             "config": self.config
         }
+    
+    def build_lazy_index(self, conversations: List[Conversation], output_dir: Any) -> Any:
+        """
+        构建延迟加载的索引元数据
+        
+        🔥 默认实现：返回 None（在线 API 系统不需要索引）
+        🔥 本地系统（如 EverMemOS）应该重写此方法
+        
+        Args:
+            conversations: 对话列表
+            output_dir: 输出目录
+            
+        Returns:
+            索引对象或元数据（本地系统返回索引元数据，在线系统返回 None）
+        """
+        return None
 

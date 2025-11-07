@@ -85,6 +85,23 @@ class EverMemOSAdapter(BaseAdapter):
         print(f"   LLM Model: {llm_config.get('model')}")
         print(f"   Output Dir: {self.output_dir}")
     
+    @staticmethod
+    def _extract_conv_index(conversation_id: str) -> str:
+        """
+        从 conversation_id 中提取数字索引部分
+        
+        例如：
+        - "locomo_0" -> "0"
+        - "personamem_42" -> "42"
+        - "123" -> "123"
+        - "test_abc_5" -> "5"
+        
+        策略：取最后一个下划线后的部分，如果没有下划线则返回原值
+        """
+        if "_" in conversation_id:
+            return conversation_id.split("_")[-1]
+        return conversation_id
+    
     async def add(
         self, 
         conversations: List[Conversation],
@@ -147,10 +164,15 @@ class EverMemOSAdapter(BaseAdapter):
             raw_data_dict[conv_id] = raw_data
         
         # 检查已完成的会话（断点续传）
+        # 🔥 使用提取后的索引来检查文件（stage1 保存时用的是提取后的索引）
         completed_convs = set()
         if checkpoint_manager:
-            all_conv_ids = [conv.conversation_id for conv in conversations]
-            completed_convs = checkpoint_manager.load_add_progress(memcells_dir, all_conv_ids)
+            all_conv_indices = [self._extract_conv_index(conv.conversation_id) for conv in conversations]
+            completed_indices = checkpoint_manager.load_add_progress(memcells_dir, all_conv_indices)
+            # 将完成的索引映射回原始 conversation_id
+            for conv in conversations:
+                if self._extract_conv_index(conv.conversation_id) in completed_indices:
+                    completed_convs.add(conv.conversation_id)
         
         # 过滤出待处理的会话
         pending_conversations = [
@@ -200,8 +222,9 @@ class EverMemOSAdapter(BaseAdapter):
                 # 为已完成的会话创建进度条（显示为完成）
                 conversation_tasks = {}
                 for conv_id in completed_convs:
+                    conv_index = self._extract_conv_index(conv_id)
                     conv_task_id = progress.add_task(
-                        f"[green]Conv-{conv_id}",
+                        f"[green]Conv-{conv_index}",
                         total=len(raw_data_dict.get(conv_id, [])),
                         completed=len(raw_data_dict.get(conv_id, [])),
                         status="✅ (已跳过)",
@@ -212,18 +235,19 @@ class EverMemOSAdapter(BaseAdapter):
                 processing_tasks = []
                 for conv in pending_conversations:
                     conv_id = conv.conversation_id
+                    conv_index = self._extract_conv_index(conv_id)  # 🔥 提取数字索引
                     conv_task_id = progress.add_task(
-                        f"[yellow]Conv-{conv_id}",
+                        f"[yellow]Conv-{conv_index}",
                         total=len(raw_data_dict[conv_id]),
                         completed=0,
                         status="等待",
                     )
                     conversation_tasks[conv_id] = conv_task_id
                     
-                    # 创建处理任务
+                    # 🔥 创建处理任务，传入提取后的索引
                     task = stage1_memcells_extraction.process_single_conversation(
-                        conv_id=conv_id,
-                        conversation=raw_data_dict[conv_id],
+                        conv_id=conv_index,  # 使用提取后的索引
+                        conversation=raw_data_dict[conv_id],  # 数据用原始 ID
                         save_dir=str(memcells_dir),
                         llm_provider=self.llm_provider,
                         event_log_extractor=self.event_log_extractor,
@@ -333,14 +357,18 @@ class EverMemOSAdapter(BaseAdapter):
         bm25_index_dir = Path(index["bm25_index_dir"])
         emb_index_dir = Path(index["emb_index_dir"])
         
-        # 按需加载 BM25 索引
-        bm25_file = bm25_index_dir / f"bm25_index_conv_{conversation_id}.pkl"
+        # 🔥 修复：从 conversation_id 提取数字索引来查找索引文件
+        # 例如：conversation_id = "locomo_0" -> conv_index = "0"
+        conv_index = self._extract_conv_index(conversation_id)
+        
+        # 按需加载 BM25 索引（使用数字索引）
+        bm25_file = bm25_index_dir / f"bm25_index_conv_{conv_index}.pkl"
         if not bm25_file.exists():
             return SearchResult(
                 query=query,
                 conversation_id=conversation_id,
                 results=[],
-                retrieval_metadata={"error": "BM25 index not found"}
+                retrieval_metadata={"error": f"BM25 index not found: {bm25_file.name}"}
             )
         
         with open(bm25_file, "rb") as f:
@@ -349,10 +377,10 @@ class EverMemOSAdapter(BaseAdapter):
         bm25 = bm25_index_data.get("bm25")
         docs = bm25_index_data.get("docs")
         
-        # 按需加载 Embedding 索引
+        # 按需加载 Embedding 索引（使用数字索引）
         emb_index = None
         if index.get("use_hybrid_search"):
-            emb_file = emb_index_dir / f"embedding_index_conv_{conversation_id}.pkl"
+            emb_file = emb_index_dir / f"embedding_index_conv_{conv_index}.pkl"
             if emb_file.exists():
                 with open(emb_file, "rb") as f:
                     emb_index = pickle.load(f)
@@ -515,3 +543,28 @@ class EverMemOSAdapter(BaseAdapter):
             exp_config.max_retries = answer_config["max_retries"]
         
         return exp_config
+    
+    def build_lazy_index(self, conversations: List[Conversation], output_dir: Any) -> Dict[str, Any]:
+        """
+        构建 EverMemOS 的延迟加载索引元数据
+        
+        🔥 EverMemOS 特点：
+        - 本地索引（memcells, bm25, embeddings）
+        - 延迟加载（只保存元数据，不加载实际索引文件）
+        
+        Args:
+            conversations: 对话列表
+            output_dir: 输出目录
+            
+        Returns:
+            索引元数据字典
+        """
+        return {
+            "type": "lazy_load",
+            "memcells_dir": str(output_dir / "memcells"),
+            "bm25_index_dir": str(output_dir / "bm25_index"),
+            "emb_index_dir": str(output_dir / "vectors"),
+            "conversation_ids": [conv.conversation_id for conv in conversations],
+            "use_hybrid_search": True,
+            "total_conversations": len(conversations),
+        }

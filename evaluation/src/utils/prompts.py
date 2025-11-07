@@ -125,3 +125,4 @@ def format_prompt(prompt_key: str, sub_key: str = None, **kwargs) -> str:
     """快捷方法：格式化 prompt"""
     return get_prompt_manager().format_prompt(prompt_key, sub_key, **kwargs)
 
+

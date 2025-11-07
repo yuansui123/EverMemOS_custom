@@ -47,6 +47,28 @@ from evaluation.src.utils.logger import get_console
 from memory_layer.llm.llm_provider import LLMProvider
 
 
+def deep_merge_config(base: dict, override: dict) -> dict:
+    """
+    深度合并配置字典
+    
+    Args:
+        base: 基础配置
+        override: 覆盖配置
+        
+    Returns:
+        合并后的配置
+    """
+    result = base.copy()
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            # 递归合并嵌套字典
+            result[key] = deep_merge_config(result[key], value)
+        else:
+            # 直接覆盖
+            result[key] = value
+    return result
+
+
 async def main():
     """主函数"""
     parser = argparse.ArgumentParser(description="Memory System Evaluation Framework")
@@ -126,6 +148,13 @@ async def main():
     system_config = load_yaml(str(system_config_path))
     console.print(f"  ✅ Loaded system config: {args.system}")
     
+    # 应用数据集特定的配置覆盖
+    if "dataset_overrides" in system_config and args.dataset in system_config["dataset_overrides"]:
+        overrides = system_config["dataset_overrides"][args.dataset]
+        # 深度合并覆盖配置（支持嵌套字段覆盖）
+        system_config = deep_merge_config(system_config, overrides)
+        console.print(f"  🔧 Applied dataset overrides for {args.dataset}: {list(overrides.keys())}")
+    
     # ===== 加载数据集 =====
     console.print(f"\n[bold cyan]Loading dataset: {args.dataset}[/bold cyan]")
     
@@ -191,14 +220,20 @@ async def main():
     console.print(f"  ✅ Created LLM provider: {llm_config.get('model')}")
     
     # ===== 创建 Pipeline =====
+    # 从数据集配置中读取需要过滤的问题类别
+    filter_categories = dataset_config.get("evaluation", {}).get("filter_category", [])
+    
     pipeline = Pipeline(
         adapter=adapter,
         evaluator=evaluator,
         llm_provider=llm_provider,
-        output_dir=output_dir
+        output_dir=output_dir,
+        filter_categories=filter_categories
     )
     
     console.print(f"  ✅ Created pipeline, output: {output_dir}")
+    if filter_categories:
+        console.print(f"  📋 Filter categories: {filter_categories}")
     
     # ===== 运行 Pipeline =====
     try:
@@ -215,16 +250,18 @@ async def main():
     
     finally:
         # ===== 清理资源 =====
-        # 关闭 rerank_service 的 HTTP session（避免 unclosed client session 警告）
-        try:
-            from agentic_layer import rerank_service
-            reranker = rerank_service.get_rerank_service()
-            if hasattr(reranker, 'close') and callable(getattr(reranker, 'close')):
-                await reranker.close()
-                console.print("[dim]🧹 Cleaned up rerank service resources[/dim]")
-        except Exception as e:
-            # 如果清理失败也不影响主流程
-            console.print(f"[dim]⚠️  Failed to cleanup resources: {e}[/dim]")
+        # 只有使用了 rerank 的系统才需要清理
+        systems_need_rerank = ["evermemos"]
+        if args.system in systems_need_rerank:
+            try:
+                from agentic_layer import rerank_service
+                reranker = rerank_service.get_rerank_service()
+                if hasattr(reranker, 'close') and callable(getattr(reranker, 'close')):
+                    await reranker.close()
+                    console.print("[dim]🧹 Cleaned up rerank service resources[/dim]")
+            except Exception as e:
+                # 如果清理失败也不影响主流程
+                console.print(f"[dim]⚠️  Failed to cleanup resources: {e}[/dim]")
 
 
 if __name__ == "__main__":

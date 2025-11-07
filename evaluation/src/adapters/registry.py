@@ -13,9 +13,18 @@ _ADAPTER_REGISTRY: Dict[str, Type[BaseAdapter]] = {}
 
 # 适配器模块映射（用于延迟加载）
 _ADAPTER_MODULES = {
+    # 本地系统
     "evermemos": "evaluation.src.adapters.evermemos_adapter",
+    
+    # 在线 API 系统
+    "mem0": "evaluation.src.adapters.mem0_adapter",
+    "memos": "evaluation.src.adapters.memos_adapter",
+    "memu": "evaluation.src.adapters.memu_adapter",
+    "zep": "evaluation.src.adapters.zep_adapter",
+    "memobase": "evaluation.src.adapters.memobase_adapter",
+    "supermemory": "evaluation.src.adapters.supermemory_adapter",
+    
     # 未来添加其他系统：
-    # "mem0": "evaluation.src.adapters.mem0_adapter",
     # "nemori": "evaluation.src.adapters.nemori_adapter",
 }
 

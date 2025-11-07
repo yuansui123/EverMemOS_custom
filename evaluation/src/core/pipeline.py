@@ -3,7 +3,6 @@ Pipeline 核心
 
 评测流程的编排器，负责协调 Add → Search → Answer → Evaluate 四个阶段。
 """
-import asyncio
 import time
 from pathlib import Path
 from typing import List, Dict, Any, Optional
@@ -19,7 +18,12 @@ from evaluation.src.utils.checkpoint import CheckpointManager
 
 # 导入答案生成所需的组件
 from memory_layer.llm.llm_provider import LLMProvider
-# format_prompt 已移除，answer 阶段由各 adapter 自行处理
+
+# 导入各个阶段的执行函数
+from evaluation.src.core.stages.add_stage import run_add_stage
+from evaluation.src.core.stages.search_stage import run_search_stage
+from evaluation.src.core.stages.answer_stage import run_answer_stage
+from evaluation.src.core.stages.evaluate_stage import run_evaluate_stage
 
 
 class Pipeline:
@@ -41,6 +45,7 @@ class Pipeline:
         output_dir: Path,
         run_name: str = "default",
         use_checkpoint: bool = True,
+        filter_categories: Optional[List[int]] = None,
     ):
         """
         初始化 Pipeline
@@ -52,6 +57,7 @@ class Pipeline:
             output_dir: 输出目录
             run_name: 运行名称（用于区分不同运行）
             use_checkpoint: 是否启用断点续传
+            filter_categories: 需要过滤掉的问题类别列表（如 [5] 表示过滤掉 Category 5）
         """
         self.adapter = adapter
         self.evaluator = evaluator
@@ -67,6 +73,9 @@ class Pipeline:
         self.use_checkpoint = use_checkpoint
         self.checkpoint = CheckpointManager(output_dir=output_dir, run_name=run_name) if use_checkpoint else None
         self.completed_stages: set = set()
+        
+        # 问题类别过滤配置（从数据集配置中读取）
+        self.filter_categories = filter_categories or []
     
     async def run(
         self,
@@ -110,14 +119,27 @@ class Pipeline:
             self.console.print(f"[yellow]   - Messages: {len(dataset.conversations[0].messages)}[/yellow]")
             self.console.print(f"[yellow]   - Questions: {len(dataset.qa_pairs)}[/yellow]\n")
         
-        # 过滤掉 Category 5（对抗性问题）
+        # 根据配置过滤问题类别（如过滤掉 Category 5 对抗性问题）
         original_qa_count = len(dataset.qa_pairs)
-        dataset.qa_pairs = [qa for qa in dataset.qa_pairs if qa.category != 5]
-        filtered_count = original_qa_count - len(dataset.qa_pairs)
         
-        if filtered_count > 0:
-            self.console.print(f"[dim]🔍 Filtered out {filtered_count} category-5 (adversarial) questions[/dim]")
-            self.console.print(f"[dim]   Remaining questions: {len(dataset.qa_pairs)}[/dim]\n")
+        if self.filter_categories:
+            # 将配置中的类别统一转为字符串（兼容 int 和 str 配置）
+            filter_set = {str(cat) for cat in self.filter_categories}
+            
+            # 过滤掉指定类别的问题
+            dataset.qa_pairs = [
+                qa for qa in dataset.qa_pairs 
+                if qa.category not in filter_set
+            ]
+            
+            filtered_count = original_qa_count - len(dataset.qa_pairs)
+            
+            if filtered_count > 0:
+                filtered_categories_str = ", ".join(sorted(filter_set))
+                self.console.print(
+                    f"[dim]🔍 Filtered out {filtered_count} questions from categories: {filtered_categories_str}[/dim]"
+                )
+                self.console.print(f"[dim]   Remaining questions: {len(dataset.qa_pairs)}[/dim]\n")
         
         # 尝试加载 checkpoint
         search_results_data = None
@@ -140,58 +162,87 @@ class Pipeline:
         results = {}
         
         # ===== Stage 1: Add =====
+        add_just_completed = False  # 🔥 标记 add 是否刚刚完成
+        
         if "add" in stages and "add" not in self.completed_stages:
             self.logger.info("Starting Stage 1: Add")
             
-            # 🔥 传递 checkpoint_manager 以支持细粒度断点续传
-            index = await self.adapter.add(
-                conversations=dataset.conversations,
+            # 🔥 准备阶段：清理已有数据（如果需要）
+            # try:
+            #     await self.adapter.prepare(conversations=dataset.conversations)
+            # except Exception as e:
+            #     self.logger.warning(f"Preparation stage failed: {e}")
+            #     self.console.print(f"\n[yellow]⚠️  Preparation failed: {e}[/yellow]")
+            #     self.console.print("[yellow]   Continuing with Add stage...[/yellow]")
+            
+            stage_results = await run_add_stage(
+                adapter=self.adapter,
+                dataset=dataset,
                 output_dir=self.output_dir,
-                checkpoint_manager=self.checkpoint
+                checkpoint_manager=self.checkpoint,
+                logger=self.logger,
+                console=self.console,
+                completed_stages=self.completed_stages,
             )
+            results.update(stage_results)
+            add_just_completed = True  # 🔥 Add 刚刚完成
             
-            # 索引元数据（延迟加载，无需持久化）
-            results["index"] = index
-            self.logger.info("✅ Stage 1 completed")
-            
-            # 保存 checkpoint
-            self.completed_stages.add("add")
-            if self.checkpoint:
-                self.checkpoint.save_checkpoint(self.completed_stages)
         elif "add" in self.completed_stages:
             self.console.print("\n[yellow]⏭️  Skip Add stage (already completed)[/yellow]")
-            # 重新构建索引元数据（延迟加载不需要 pkl 文件）
-            index = {
-                "type": "lazy_load",
-                "memcells_dir": str(self.output_dir / "memcells"),
-                "bm25_index_dir": str(self.output_dir / "bm25_index"),
-                "emb_index_dir": str(self.output_dir / "vectors"),
-                "conversation_ids": [conv.conversation_id for conv in dataset.conversations],
-                "use_hybrid_search": True,
-                "total_conversations": len(dataset.conversations),
-            }
-            results["index"] = index
+            # 🔥 重新构建索引元数据（由 adapter 负责，仅本地系统需要）
+            # 对于在线 API，返回 None，但仍需设置 results["index"]
+            index = self.adapter.build_lazy_index(dataset.conversations, self.output_dir)
+            results["index"] = index  # 即使是 None 也要设置
         else:
-            # 重新构建索引元数据
-            index = {
-                "type": "lazy_load",
-                "memcells_dir": str(self.output_dir / "memcells"),
-                "bm25_index_dir": str(self.output_dir / "bm25_index"),
-                "emb_index_dir": str(self.output_dir / "vectors"),
-                "conversation_ids": [conv.conversation_id for conv in dataset.conversations],
-                "use_hybrid_search": True,
-                "total_conversations": len(dataset.conversations),
-            }
-            results["index"] = index
-            self.logger.info("⏭️  Skipped Stage 1, using lazy loading")
+            # 🔥 重新构建索引元数据（由 adapter 负责，仅本地系统需要）
+            # 对于在线 API，返回 None，但仍需设置 results["index"]
+            index = self.adapter.build_lazy_index(dataset.conversations, self.output_dir)
+            results["index"] = index  # 即使是 None 也要设置
+            if index is not None:
+                self.logger.info("⏭️  Skipped Stage 1, using lazy loading")
+        
+        # ⏰ Post-Add Wait: 对于在线 API 系统，等待后台索引构建完成
+        # 🔥 关键修复：只有当 add 刚刚完成时才等待
+        if add_just_completed:
+            wait_seconds = self.adapter.config.get("post_add_wait_seconds", 0)
+            if wait_seconds > 0 and "search" in stages:
+                self.console.print(
+                    f"\n[yellow]⏰ Waiting {wait_seconds}s for backend indexing to complete...[/yellow]"
+                )
+                self.logger.info(f"⏰ Waiting {wait_seconds}s for backend indexing")
+                
+                # 显示倒计时进度条
+                from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TimeRemainingColumn
+                with Progress(
+                    SpinnerColumn(),
+                    TextColumn("[progress.description]{task.description}"),
+                    BarColumn(),
+                    TextColumn("{task.percentage:>3.0f}%"),
+                    TimeRemainingColumn(),
+                    console=self.console
+                ) as progress:
+                    task = progress.add_task(
+                        f"⏰ Backend indexing in progress...",
+                        total=wait_seconds
+                    )
+                    for i in range(wait_seconds):
+                        time.sleep(1)
+                        progress.update(task, advance=1)
+                
+                self.console.print(f"[green]✅ Wait completed, ready for search[/green]\n")
+                self.logger.info("✅ Post-add wait completed")
         
         # ===== Stage 2: Search =====
         if "search" in stages and "search" not in self.completed_stages:
             self.logger.info("Starting Stage 2: Search")
             
-            search_results = await self._run_search(
-                dataset.qa_pairs,
-                index
+            search_results = await run_search_stage(
+                adapter=self.adapter,
+                qa_pairs=dataset.qa_pairs,
+                index=results["index"],
+                conversations=dataset.conversations,  # 传递 conversations 用于重建缓存
+                checkpoint_manager=self.checkpoint,
+                logger=self.logger,
             )
             
             self.saver.save_json(
@@ -220,7 +271,8 @@ class Pipeline:
                 search_data = self.saver.load_json("search_results.json")
                 search_results = [self._dict_to_search_result(d) for d in search_data]
                 results["search_results"] = search_results
-        else:
+        elif "answer" in stages or "eval" in stages:
+            # 只有当后续阶段需要 search_results 时，才尝试加载
             if self.saver.file_exists("search_results.json"):
                 search_data = self.saver.load_json("search_results.json")
                 search_results = [self._dict_to_search_result(d) for d in search_data]
@@ -228,14 +280,20 @@ class Pipeline:
                 self.logger.info("⏭️  Skipped Stage 2, loaded existing results")
             else:
                 raise FileNotFoundError("Search results not found. Please run 'search' stage first.")
+        else:
+            # 不需要 search_results（例如只运行 add 阶段）
+            search_results = None
         
         # ===== Stage 3: Answer =====
         if "answer" in stages and "answer" not in self.completed_stages:
             self.logger.info("Starting Stage 3: Answer")
             
-            answer_results = await self._run_answer(
-                dataset.qa_pairs,
-                search_results
+            answer_results = await run_answer_stage(
+                adapter=self.adapter,
+                qa_pairs=dataset.qa_pairs,
+                search_results=search_results,
+                checkpoint_manager=self.checkpoint,
+                logger=self.logger,
             )
             
             self.saver.save_json(
@@ -265,7 +323,8 @@ class Pipeline:
                 answer_data = self.saver.load_json("answer_results.json")
                 answer_results = [self._dict_to_answer_result(d) for d in answer_data]
                 results["answer_results"] = answer_results
-        else:
+        elif "evaluate" in stages:
+            # 只有当 evaluate 阶段需要 answer_results 时，才尝试加载
             if self.saver.file_exists("answer_results.json"):
                 answer_data = self.saver.load_json("answer_results.json")
                 answer_results = [self._dict_to_answer_result(d) for d in answer_data]
@@ -273,19 +332,24 @@ class Pipeline:
                 self.logger.info("⏭️  Skipped Stage 3, loaded existing results")
             else:
                 raise FileNotFoundError("Answer results not found. Please run 'answer' stage first.")
+        else:
+            # 不需要 answer_results（例如只运行 add 或 search）
+            answer_results = None
         
         # ===== Stage 4: Evaluate =====
         if "evaluate" in stages and "evaluate" not in self.completed_stages:
-            self.logger.info("Starting Stage 4: Evaluate")
-            
-            eval_result = await self.evaluator.evaluate(answer_results)
+            eval_result = await run_evaluate_stage(
+                evaluator=self.evaluator,
+                answer_results=answer_results,
+                checkpoint_manager=self.checkpoint,
+                logger=self.logger,
+            )
             
             self.saver.save_json(
                 self._eval_result_to_dict(eval_result),
                 "eval_results.json"
             )
             results["eval_result"] = eval_result
-            self.logger.info("✅ Stage 4 completed")
             
             # 保存 checkpoint
             self.completed_stages.add("evaluate")
@@ -298,11 +362,6 @@ class Pipeline:
                 )
         elif "evaluate" in self.completed_stages:
             self.console.print("\n[yellow]⏭️  Skip Evaluate stage (already completed)[/yellow]")
-        
-        # # 所有阶段完成后，删除 checkpoint
-        # if self.checkpoint and len(self.completed_stages) == 4:
-        #     self.console.print("\n[dim]🧹 Cleaning up checkpoint...[/dim]")
-        #     self.checkpoint.delete_checkpoint()
         
         # 生成报告
         elapsed_time = time.time() - start_time
@@ -346,7 +405,6 @@ class Pipeline:
         else:
             msg_desc = f"{len(first_conv.messages)} (all)"
         
-        # 只保留该对话的前 M 个问题（用于 Search/Answer/Evaluate）
         # 0 表示保留所有问题
         conv_qa_pairs = [
             qa for qa in dataset.qa_pairs 
@@ -377,278 +435,6 @@ class Pipeline:
                 "smoke_questions": num_questions if num_questions > 0 else len(selected_qa_pairs),
             }
         )
-    
-    async def _run_search(
-        self,
-        qa_pairs: List,
-        index: Any
-    ) -> List[SearchResult]:
-        """
-        并发执行检索，支持细粒度 checkpoint
-        
-        按会话分组处理，每处理完一个会话就保存 checkpoint（和 archive 的 stage3 一致）
-        """
-        print(f"\n{'='*60}")
-        print(f"Stage 2/4: Search")
-        print(f"{'='*60}")
-        
-        # 🔥 加载细粒度 checkpoint
-        all_search_results_dict = {}
-        if self.checkpoint:
-            all_search_results_dict = self.checkpoint.load_search_progress()
-        
-        # 按会话分组 QA 对
-        conv_to_qa = {}
-        for qa in qa_pairs:
-            conv_id = qa.metadata.get("conversation_id", "unknown")
-            if conv_id not in conv_to_qa:
-                conv_to_qa[conv_id] = []
-            conv_to_qa[conv_id].append(qa)
-        
-        total_convs = len(conv_to_qa)
-        processed_convs = set(all_search_results_dict.keys())
-        remaining_convs = set(conv_to_qa.keys()) - processed_convs
-        
-        print(f"Total conversations: {total_convs}")
-        print(f"Total questions: {len(qa_pairs)}")
-        if processed_convs:
-            print(f"Already processed: {len(processed_convs)} conversations (from checkpoint)")
-            print(f"Remaining: {len(remaining_convs)} conversations")
-        
-        semaphore = asyncio.Semaphore(20)
-        
-        async def search_single(qa):
-            async with semaphore:
-                conv_id = qa.metadata.get("conversation_id", "0")
-                return await self.adapter.search(qa.question, conv_id, index)
-        
-        # 按会话逐个处理（和 archive 一致）
-        for idx, (conv_id, qa_list) in enumerate(sorted(conv_to_qa.items())):
-            # 🔥 跳过已处理的会话
-            if conv_id in processed_convs:
-                print(f"\n⏭️  Skipping Conversation ID: {conv_id} (already processed)")
-                continue
-            
-            print(f"\n--- Processing Conversation ID: {conv_id} ({idx+1}/{total_convs}) ---")
-            print(f"    Questions in this conversation: {len(qa_list)}")
-            
-            # 并发处理这个会话的所有问题
-            tasks = [search_single(qa) for qa in qa_list]
-            results_for_conv = await asyncio.gather(*tasks)
-            
-            # 将结果保存为字典格式
-            results_for_conv_dict = [
-                {
-                    "question_id": qa.question_id,
-                    "query": qa.question,
-                    "conversation_id": conv_id,
-                    "results": result.results,
-                    "retrieval_metadata": result.retrieval_metadata
-                }
-                for qa, result in zip(qa_list, results_for_conv)
-            ]
-            
-            all_search_results_dict[conv_id] = results_for_conv_dict
-            
-            # 🔥 每处理完一个会话就保存检查点（和 archive 一致）
-            if self.checkpoint:
-                self.checkpoint.save_search_progress(all_search_results_dict)
-        
-        # 🔥 完成后删除细粒度检查点
-        if self.checkpoint:
-            self.checkpoint.delete_search_checkpoint()
-        
-        # 将字典格式转换为 SearchResult 对象列表（保持原有返回格式）
-        all_results = []
-        for conv_id in sorted(conv_to_qa.keys()):
-            if conv_id in all_search_results_dict:
-                for result_dict in all_search_results_dict[conv_id]:
-                    all_results.append(SearchResult(
-                        query=result_dict["query"],
-                        conversation_id=result_dict["conversation_id"],
-                        results=result_dict["results"],
-                        retrieval_metadata=result_dict.get("retrieval_metadata", {})
-                    ))
-        
-        print(f"\n{'='*60}")
-        print(f"🎉 All conversations processed!")
-        print(f"{'='*60}")
-        print(f"✅ Search completed: {len(all_results)} results\n")
-        return all_results
-    
-    async def _run_answer(
-        self,
-        qa_pairs: List,
-        search_results: List[SearchResult]
-    ) -> List[AnswerResult]:
-        """
-        生成答案，支持细粒度 checkpoint
-        
-        每 SAVE_INTERVAL 个问题保存一次 checkpoint（和 archive 的 stage4 一致）
-        """
-        print(f"\n{'='*60}")
-        print(f"Stage 3/4: Answer")
-        print(f"{'='*60}")
-        
-        SAVE_INTERVAL = 400  # 🔥 和 archive 保持一致：每 400 个任务保存一次
-        MAX_CONCURRENT = 50  # 最大并发数
-        
-        # 🔥 加载细粒度 checkpoint
-        all_answer_results = {}
-        if self.checkpoint:
-            loaded_results = self.checkpoint.load_answer_progress()
-            # 转换为 {question_id: AnswerResult} 格式
-            for result in loaded_results.values():
-                all_answer_results[result["question_id"]] = result
-        
-        total_qa_count = len(qa_pairs)
-        processed_count = len(all_answer_results)
-        
-        print(f"Total questions: {total_qa_count}")
-        if processed_count > 0:
-            print(f"Already processed: {processed_count} questions (from checkpoint)")
-            print(f"Remaining: {total_qa_count - processed_count} questions")
-        
-        # 准备待处理的任务
-        pending_tasks = []
-        for qa, sr in zip(qa_pairs, search_results):
-            if qa.question_id not in all_answer_results:
-                pending_tasks.append((qa, sr))
-        
-        if not pending_tasks:
-            print(f"✅ All questions already processed!")
-            # 转换为 AnswerResult 对象列表（按原始顺序）
-            results = []
-            for qa in qa_pairs:
-                if qa.question_id in all_answer_results:
-                    result_dict = all_answer_results[qa.question_id]
-                    results.append(AnswerResult(
-                        question_id=result_dict["question_id"],
-                        question=result_dict["question"],
-                        answer=result_dict["answer"],
-                        golden_answer=result_dict["golden_answer"],
-                        category=result_dict.get("category"),
-                        conversation_id=result_dict.get("conversation_id", ""),
-                        search_results=result_dict.get("search_results", []),
-                    ))
-            return results
-        
-        semaphore = asyncio.Semaphore(MAX_CONCURRENT)
-        completed = processed_count
-        failed = 0
-        start_time = time.time()
-        
-        async def answer_single_with_tracking(qa, search_result):
-            nonlocal completed, failed
-            
-            async with semaphore:
-                try:
-                    # 构建 context
-                    context = self._build_context(search_result)
-                    
-                    # 🔥 直接调用 adapter 的 answer 方法
-                    answer = await self.adapter.answer(
-                        query=qa.question,
-                        context=context,
-                        conversation_id=search_result.conversation_id,
-                    )
-                    
-                    answer = answer.strip()
-                
-                except Exception as e:
-                    print(f"  ⚠️ Answer generation failed for {qa.question_id}: {e}")
-                    answer = "Error: Failed to generate answer"
-                    failed += 1
-                
-                result = AnswerResult(
-                    question_id=qa.question_id,
-                    question=qa.question,
-                    answer=answer,
-                    golden_answer=qa.answer,
-                    category=qa.category,
-                    conversation_id=search_result.conversation_id,
-                    search_results=search_result.results,
-                )
-                
-                # 保存结果
-                all_answer_results[qa.question_id] = {
-                    "question_id": result.question_id,
-                    "question": result.question,
-                    "answer": result.answer,
-                    "golden_answer": result.golden_answer,
-                    "category": result.category,
-                    "conversation_id": result.conversation_id,
-                    "search_results": result.search_results,
-                }
-                
-                completed += 1
-                
-                # 🔥 定期保存 checkpoint（和 archive 一致）
-                if self.checkpoint and (completed % SAVE_INTERVAL == 0 or completed == total_qa_count):
-                    elapsed = time.time() - start_time
-                    speed = completed / elapsed if elapsed > 0 else 0
-                    eta = (total_qa_count - completed) / speed if speed > 0 else 0
-                    
-                    print(f"Progress: {completed}/{total_qa_count} ({completed/total_qa_count*100:.1f}%) | "
-                          f"Speed: {speed:.1f} qa/s | Failed: {failed} | ETA: {eta/60:.1f} min")
-                    
-                    self.checkpoint.save_answer_progress(all_answer_results, completed, total_qa_count)
-                
-                return result
-        
-        # 创建所有待处理的任务
-        tasks = [
-            answer_single_with_tracking(qa, sr)
-            for qa, sr in pending_tasks
-        ]
-        
-        # 并发执行
-        await asyncio.gather(*tasks)
-        
-        # 统计信息
-        elapsed_time = time.time() - start_time
-        success_rate = (completed - failed) / completed * 100 if completed > 0 else 0
-        
-        print(f"\n{'='*60}")
-        print(f"✅ All responses generated!")
-        print(f"   - Total questions: {total_qa_count}")
-        print(f"   - Successful: {completed - failed}")
-        print(f"   - Failed: {failed}")
-        print(f"   - Success rate: {success_rate:.1f}%")
-        print(f"   - Time elapsed: {elapsed_time/60:.1f} minutes ({elapsed_time:.0f}s)")
-        print(f"   - Average speed: {total_qa_count/elapsed_time:.1f} qa/s")
-        print(f"{'='*60}\n")
-        
-        # 🔥 完成后删除细粒度检查点（和 archive 一致）
-        if self.checkpoint:
-            self.checkpoint.delete_answer_checkpoints()
-        
-        # 转换为 AnswerResult 对象列表（按原始顺序）
-        results = []
-        for qa in qa_pairs:
-            if qa.question_id in all_answer_results:
-                result_dict = all_answer_results[qa.question_id]
-                results.append(AnswerResult(
-                    question_id=result_dict["question_id"],
-                    question=result_dict["question"],
-                    answer=result_dict["answer"],
-                    golden_answer=result_dict["golden_answer"],
-                    category=result_dict.get("category"),
-                    conversation_id=result_dict.get("conversation_id", ""),
-                    search_results=result_dict.get("search_results", []),
-                ))
-        
-        return results
-    
-    def _build_context(self, search_result: SearchResult) -> str:
-        """从检索结果构建上下文"""
-        context_parts = []
-        
-        for idx, result in enumerate(search_result.results[:10], 1):
-            content = result.get("content", "")
-            context_parts.append(f"{idx}. {content}")
-        
-        return "\n\n".join(context_parts)
     
     def _generate_report(self, results: Dict[str, Any], elapsed_time: float):
         """生成评测报告"""
@@ -687,6 +473,7 @@ class Pipeline:
     
     # 序列化辅助方法
     def _search_result_to_dict(self, sr: SearchResult) -> dict:
+        """将 SearchResult 对象转换为字典"""
         return {
             "query": sr.query,
             "conversation_id": sr.conversation_id,
@@ -695,9 +482,22 @@ class Pipeline:
         }
     
     def _dict_to_search_result(self, d: dict) -> SearchResult:
+        """将字典转换为 SearchResult 对象"""
         return SearchResult(**d)
     
     def _answer_result_to_dict(self, ar: AnswerResult) -> dict:
+        """将 AnswerResult 对象转换为字典"""
+        # 处理空的 search_results
+        search_results = ar.search_results
+        if search_results:
+            # 检查是否所有结果的 content 都为空
+            all_empty = all(
+                not result.get("content", "").strip() 
+                for result in search_results
+            )
+            if all_empty:
+                search_results = []
+        
         return {
             "question_id": ar.question_id,
             "question": ar.question,
@@ -705,14 +505,16 @@ class Pipeline:
             "golden_answer": ar.golden_answer,
             "category": ar.category,
             "conversation_id": ar.conversation_id,
-            "search_results": ar.search_results,
+            "search_results": search_results,
             "metadata": ar.metadata,
         }
     
     def _dict_to_answer_result(self, d: dict) -> AnswerResult:
+        """将字典转换为 AnswerResult 对象"""
         return AnswerResult(**d)
     
     def _eval_result_to_dict(self, er: EvaluationResult) -> dict:
+        """将 EvaluationResult 对象转换为字典"""
         return {
             "total_questions": er.total_questions,
             "correct": er.correct,
@@ -720,4 +522,3 @@ class Pipeline:
             "detailed_results": er.detailed_results,
             "metadata": er.metadata,
         }
-

@@ -157,6 +157,25 @@ prod = [
     {include-group = "gpu"},
 ]
 
+# Evaluation 评测框架依赖
+evaluation = [
+    # 终端美化和进度显示
+    "rich>=13.0.0",
+    # HTTP 请求库（在线 API 调用）
+    "requests>=2.31.0",
+]
+
+# Evaluation + 所有在线 API 客户端（完整测试环境）
+evaluation-full = [
+    {include-group = "evaluation"},
+    # Online Memory Systems API 客户端
+    "mem0ai>=1.0.0",          # Mem0
+    "zep-cloud>=3.9.0",       # Zep
+    "memobase>=0.0.26",       # Memobase
+    "supermemory>=3.4.0",     # Supermemory
+    #"memu-py>=0.2.2",         # Memu
+]
+
 [project.scripts]
 bootstrap = "src.bootstrap:main"
 web = "src.run:main"
