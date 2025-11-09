@@ -5,20 +5,17 @@
 <p><strong>每次交流，都由理解驱动</strong> · 企业级智能记忆系统</p>
 
 <p>
-  <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-0A9CF3?style=flat-square" />
-  <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-00BFA6?style=flat-square" />
-  <img alt="Status" src="https://img.shields.io/badge/Status-Production-00C49A?style=flat-square" />
-  <img alt="Code Size" src="https://img.shields.io/github/languages/code-size/EverMind-AI/EverMemOS?color=0097A7&style=flat-square" />
-  <a href="https://github.com/EverMind-AI/EverMemOS/releases">
-    <img alt="Release" src="https://img.shields.io/badge/release-v1.0.0-0088CC?style=flat-square" />
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" />
+  <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-D22128?style=flat-square&logo=apache&logoColor=white" />
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=docker&logoColor=white" />
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-Latest-009688?style=flat-square&logo=fastapi&logoColor=white" />
+  <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-7.0+-47A248?style=flat-square&logo=mongodb&logoColor=white" />
+  <img alt="Elasticsearch" src="https://img.shields.io/badge/Elasticsearch-8.x-005571?style=flat-square&logo=elasticsearch&logoColor=white" />
+  <img alt="Milvus" src="https://img.shields.io/badge/Milvus-2.4+-00A3E0?style=flat-square" />
+  <img alt="Redis" src="https://img.shields.io/badge/Redis-7.x-DC382D?style=flat-square&logo=redis&logoColor=white" />
+   <a href="https://github.com/EverMind-AI/EverMemOS/releases">
+    <img alt="Release" src="https://img.shields.io/badge/release-v1.0.0-4A90E2?style=flat-square" />
   </a>
-<!-- 
-  <a href="https://github.com/EverMind-AI/EverMemOS/releases"><img alt="Latest Release" src="https://img.shields.io/github/v/release/EverMind-AI/EverMemOS" /></a> -->
-  <!-- <a href="https://github.com/EverMind-AI/EverMemOS/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/EverMind-AI/EverMemOS?style=social" /></a> -->
-  <!-- <a href="https://github.com/EverMind-AI/EverMemOS/network/members"><img alt="GitHub forks" src="https://img.shields.io/github/forks/EverMind-AI/EverMemOS?style=social" /></a> -->
-  <!-- <a href="https://github.com/EverMind-AI/EverMemOS/pulls"><img alt="Pull Requests" src="https://img.shields.io/github/issues-pr/EverMind-AI/EverMemOS" /></a> -->
-  <!-- <a href="https://github.com/EverMind-AI/EverMemOS/actions"><img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/EverMind-AI/EverMemOS/main.yml?branch=main" /></a> -->
-  <!-- <a href="https://github.com/EverMind-AI/EverMemOS/issues"><img alt="Issues" src="https://img.shields.io/github/issues/EverMind-AI/EverMemOS" /></a> -->
 </p>
 
 <p>
@@ -271,15 +268,51 @@ cp env.template .env
 
 演示部分展示了 EverMemOS 的端到端功能。
 
-> 💡 **快速体验**：直接运行 `uv run python src/bootstrap.py demo/simple_demo.py` 快速体验记忆存储和检索功能！
+---
+
+**🚀 快速开始：简单演示（推荐）** ⭐
+
+体验 EverMemOS 最快的方式！只需 2 步就能看到记忆存储和检索的完整流程：
+
+```bash
+# 步骤 1：启动 API 服务器（终端 1）
+uv run python src/bootstrap.py start_server.py
+
+# 步骤 2：运行简单演示（终端 2）
+uv run python src/bootstrap.py demo/simple_demo.py
+```
+
+**它会做什么：**
+- 存储 4 条关于运动爱好的对话消息
+- 等待 10 秒建立索引
+- 用 3 个不同的查询搜索相关记忆
+- 展示完整的工作流程和友好的说明
+
+**适合人群：** 首次使用者、快速测试、理解核心概念
+
+查看演示代码 [`demo/simple_demo.py`](demo/simple_demo.py)
+
+---
 
 我们还设置了完整的体验场景：
+
+**前置条件：启动 API 服务器**
+
+```bash
+# 终端 1：启动 API 服务器（必需）
+uv run python src/bootstrap.py start_server.py
+```
+
+> 💡 **提示**：API 服务器需要一直运行，请保持此终端打开。下面的所有操作都需要在另一个终端中进行。
+
+---
 
 **步骤 1: 提取记忆**
 
 运行记忆提取脚本，处理示例对话数据并构建记忆数据库：
 
 ```bash
+# 终端 2：运行提取脚本
 uv run python src/bootstrap.py demo/extract_memory.py
 ```
 
@@ -302,6 +335,7 @@ uv run python src/bootstrap.py demo/extract_memory.py
 提取记忆后，启动交互式聊天演示：
 
 ```bash
+# 终端 2：运行聊天程序（确保 API 服务器仍在运行）
 uv run python src/bootstrap.py demo/chat_with_memory.py
 ```
 

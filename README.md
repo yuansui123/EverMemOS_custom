@@ -5,20 +5,17 @@
 <p><strong>Let every interaction be driven by understanding.</strong> · Enterprise-Grade Intelligent Memory System</p>
 
 <p>
-  <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-0A9CF3?style=flat-square" />
-  <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-00BFA6?style=flat-square" />
-  <img alt="Status" src="https://img.shields.io/badge/Status-Production-00C49A?style=flat-square" />
-  <img alt="Code Size" src="https://img.shields.io/github/languages/code-size/EverMind-AI/EverMemOS?color=0097A7&style=flat-square" />
-  <a href="https://github.com/EverMind-AI/EverMemOS/releases">
-    <img alt="Release" src="https://img.shields.io/badge/release-v1.0.0-0088CC?style=flat-square" />
+  <img alt="Python" src="https://img.shields.io/badge/Python-3.10+-3776AB?style=flat-square&logo=python&logoColor=white" />
+  <img alt="License" src="https://img.shields.io/badge/License-Apache%202.0-D22128?style=flat-square&logo=apache&logoColor=white" />
+  <img alt="Docker" src="https://img.shields.io/badge/Docker-Supported-2496ED?style=flat-square&logo=docker&logoColor=white" />
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-Latest-009688?style=flat-square&logo=fastapi&logoColor=white" />
+  <img alt="MongoDB" src="https://img.shields.io/badge/MongoDB-7.0+-47A248?style=flat-square&logo=mongodb&logoColor=white" />
+  <img alt="Elasticsearch" src="https://img.shields.io/badge/Elasticsearch-8.x-005571?style=flat-square&logo=elasticsearch&logoColor=white" />
+  <img alt="Milvus" src="https://img.shields.io/badge/Milvus-2.4+-00A3E0?style=flat-square" />
+  <img alt="Redis" src="https://img.shields.io/badge/Redis-7.x-DC382D?style=flat-square&logo=redis&logoColor=white" />
+   <a href="https://github.com/EverMind-AI/EverMemOS/releases">
+    <img alt="Release" src="https://img.shields.io/badge/release-v1.0.0-4A90E2?style=flat-square" />
   </a>
-<!-- 
-  <a href="https://github.com/EverMind-AI/EverMemOS/releases"><img alt="Latest Release" src="https://img.shields.io/github/v/release/EverMind-AI/EverMemOS" /></a> -->
-  <!-- <a href="https://github.com/EverMind-AI/EverMemOS/stargazers"><img alt="GitHub stars" src="https://img.shields.io/github/stars/EverMind-AI/EverMemOS?style=social" /></a> -->
-  <!-- <a href="https://github.com/EverMind-AI/EverMemOS/network/members"><img alt="GitHub forks" src="https://img.shields.io/github/forks/EverMind-AI/EverMemOS?style=social" /></a> -->
-  <!-- <a href="https://github.com/EverMind-AI/EverMemOS/pulls"><img alt="Pull Requests" src="https://img.shields.io/github/issues-pr/EverMind-AI/EverMemOS" /></a> -->
-  <!-- <a href="https://github.com/EverMind-AI/EverMemOS/actions"><img alt="Build Status" src="https://img.shields.io/github/actions/workflow/status/EverMind-AI/EverMemOS/main.yml?branch=main" /></a> -->
-  <!-- <a href="https://github.com/EverMind-AI/EverMemOS/issues"><img alt="Issues" src="https://img.shields.io/github/issues/EverMind-AI/EverMemOS" /></a> -->
 </p>
 
 <p>
@@ -276,13 +273,51 @@ EverMemOS offers multiple usage methods. Choose the one that best suits your nee
 
 The demo showcases the end-to-end functionality of EverMemOS.
 
-> 💡 **Quick Experience**: Run `uv run python src/bootstrap.py demo/simple_demo.py` to quickly experience memory storage and retrieval!
+---
+
+**🚀 Quick Start: Simple Demo (Recommended)** ⭐
+
+The fastest way to experience EverMemOS! Just 2 steps to see memory storage and retrieval in action:
+
+```bash
+# Step 1: Start the API server (in terminal 1)
+uv run python src/bootstrap.py start_server.py
+
+# Step 2: Run the simple demo (in terminal 2)
+uv run python src/bootstrap.py demo/simple_demo.py
+```
+
+**What it does:**
+- Stores 4 conversation messages about sports hobbies
+- Waits 10 seconds for indexing
+- Searches for relevant memories with 3 different queries
+- Shows complete workflow with friendly explanations
+
+**Perfect for:** First-time users, quick testing, understanding core concepts
+
+See the demo code at [`demo/simple_demo.py`](demo/simple_demo.py)
+
+---
+
+We also provide a full-featured experience:
+
+**Prerequisites: Start the API Server**
+
+```bash
+# Terminal 1: Start the API server (required)
+uv run python src/bootstrap.py start_server.py
+```
+
+> 💡 **Tip**: Keep the API server running throughout. All following operations should be performed in another terminal.
+
+---
 
 **Step 1: Extract Memories**
 
 Run the memory extraction script to process sample conversation data and build the memory database:
 
 ```bash
+# Terminal 2: Run the extraction script
 uv run python src/bootstrap.py demo/extract_memory.py
 ```
 
@@ -305,6 +340,7 @@ This script will:
 After extracting memories, start the interactive chat demo:
 
 ```bash
+# Terminal 2: Run the chat program (ensure API server is still running)
 uv run python src/bootstrap.py demo/chat_with_memory.py
 ```
 
