@@ -166,7 +166,7 @@ class ChatSession:
             print(f"[{self.texts.get('error_label')}] {e}")
     
     async def retrieve_memories(self, query: str) -> List[Dict[str, Any]]:
-        """检索相关记忆 - 使用 V3 API（对齐 test_retrieval_modes.py）
+        """检索相关记忆 - 支持多种检索模式
         
         Args:
             query: 用户查询
@@ -177,16 +177,29 @@ class ChatSession:
         if not self.memory_manager:
             raise RuntimeError("请先调用 initialize() 初始化会话")
         
-        # 🔥 使用 retrieve_lightweight API（对齐 test_retrieval_modes.py）
-        result = await self.memory_manager.retrieve_lightweight(
-            query=query,
-            user_id="default",
-            group_id=self.group_id,
-            top_k=self.config.top_k_memories,
-            time_range_days=self.config.time_range_days,
-            retrieval_mode=self.retrieval_mode,  # rrf / embedding / bm25
-            data_source=self.data_source,        # memcell / event_log
-        )
+        # 🔥 根据检索模式选择不同的 API
+        if self.retrieval_mode == "agentic":
+            # Agentic 检索：需要 LLM Provider
+            result = await self.memory_manager.retrieve_agentic(
+                query=query,
+                user_id="default",
+                group_id=self.group_id,
+                time_range_days=self.config.time_range_days,
+                top_k=self.config.top_k_memories,
+                llm_provider=self.llm_provider,  # 传递 LLM Provider
+                agentic_config=None,  # 使用默认配置
+            )
+        else:
+            # 其他模式：使用 retrieve_lightweight API
+            result = await self.memory_manager.retrieve_lightweight(
+                query=query,
+                user_id="default",
+                group_id=self.group_id,
+                top_k=self.config.top_k_memories,
+                time_range_days=self.config.time_range_days,
+                retrieval_mode=self.retrieval_mode,  # rrf / embedding / bm25
+                data_source=self.data_source,        # memcell / event_log
+            )
         
         # 提取结果和元数据
         memories = result.get("memories", [])

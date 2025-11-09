@@ -79,12 +79,62 @@ class ChatUI:
                 "rrf": "RRF融合",
                 "embedding": "纯向量",
                 "bm25": "纯BM25",
+                "agentic": "Agentic",
+                "agentic_fallback": "Agentic(降级)",
             }
             mode_text = mode_map.get(retrieval_mode, retrieval_mode)
             heading += f" | {mode_text} | {int(latency_ms)}ms"
         
         ui.section_heading(heading)
         
+        # 🔥 Agentic 检索特殊信息显示
+        if retrieval_metadata and retrieval_metadata.get("retrieval_mode") == "agentic":
+            agentic_info = []
+            
+            # LLM 判断结果
+            is_sufficient = retrieval_metadata.get("is_sufficient")
+            if is_sufficient is not None:
+                status = "✅ 充分" if is_sufficient else "❌ 不充分"
+                agentic_info.append(f"LLM 判断: {status}")
+            
+            # 是否多轮
+            is_multi_round = retrieval_metadata.get("is_multi_round", False)
+            if is_multi_round:
+                agentic_info.append("🔄 多轮检索")
+                
+                # 改进查询
+                refined_queries = retrieval_metadata.get("refined_queries", [])
+                if refined_queries:
+                    agentic_info.append(f"生成查询: {len(refined_queries)} 个")
+            else:
+                agentic_info.append("⚡ 单轮检索")
+            
+            # Round 统计
+            round1_count = retrieval_metadata.get("round1_count", 0)
+            round2_count = retrieval_metadata.get("round2_count", 0)
+            if round1_count:
+                agentic_info.append(f"R1: {round1_count} 条")
+            if round2_count:
+                agentic_info.append(f"R2: {round2_count} 条")
+            
+            if agentic_info:
+                print()
+                ui.note(" | ".join(agentic_info), icon="🤖")
+                
+                # 显示 LLM 推理
+                reasoning = retrieval_metadata.get("reasoning")
+                if reasoning:
+                    print(f"   💭 {reasoning}")
+                
+                # 显示改进查询
+                if is_multi_round:
+                    refined_queries = retrieval_metadata.get("refined_queries", [])
+                    if refined_queries:
+                        print(f"   📝 改进查询:")
+                        for i, q in enumerate(refined_queries[:3], 1):
+                            print(f"      {i}. {q[:60]}{'...' if len(q) > 60 else ''}")
+        
+        # 显示记忆列表
         lines = []
         for i, mem in enumerate(memories, start=1):
             timestamp = mem.get("timestamp", "")[:10]
@@ -94,6 +144,7 @@ class ChatUI:
             lines.append(f"📌 [{i:2d}]  {timestamp}  │  {content}")
         
         if lines:
+            print()
             ui.panel(lines)
     
     @staticmethod

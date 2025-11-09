@@ -111,23 +111,30 @@ class ChatOrchestrator:
         print("  [1] RRF 融合（推荐） - Embedding + BM25 融合")
         print("  [2] 纯向量检索 - 语义理解最强")
         print("  [3] 纯 BM25 检索 - 关键词精确匹配")
+        print("  [4] Agentic 检索 - LLM 引导的多轮检索（实验性）")
         print()
         
-        mode_map = {1: "rrf", 2: "embedding", 3: "bm25"}
-        mode_desc = {1: "RRF 融合", 2: "纯向量检索", 3: "纯 BM25"}
+        mode_map = {1: "rrf", 2: "embedding", 3: "bm25", 4: "agentic"}
+        mode_desc = {1: "RRF 融合", 2: "纯向量检索", 3: "纯 BM25", 4: "Agentic 检索"}
         
         while True:
             try:
-                choice = input("请选择检索模式 [1-3]: ").strip()
+                choice = input("请选择检索模式 [1-4]: ").strip()
                 if not choice:
                     continue
                 
                 index = int(choice)
                 if index in mode_map:
+                    # 特殊提示：Agentic 模式需要 LLM
+                    if index == 4:
+                        print()
+                        ui.note("⚠️  Agentic 检索将使用 LLM API，可能产生额外费用", icon="💰")
+                        print()
+                    
                     ui.success(f"✓ 已选择: {mode_desc[index]}")
                     return mode_map[index]
                 else:
-                    ui.error("✗ 请输入 1-3")
+                    ui.error("✗ 请输入 1-4")
             except ValueError:
                 ui.error("✗ 请输入有效数字")
             except KeyboardInterrupt:
