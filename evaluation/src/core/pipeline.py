@@ -480,16 +480,6 @@ class Pipeline:
     def _answer_result_to_dict(self, ar: AnswerResult) -> dict:
         """将 AnswerResult 对象转换为字典"""
         # 处理空的 search_results
-        search_results = ar.search_results
-        if search_results:
-            # 检查是否所有结果的 content 都为空
-            all_empty = all(
-                not result.get("content", "").strip() 
-                for result in search_results
-            )
-            if all_empty:
-                search_results = []
-        
         return {
             "question_id": ar.question_id,
             "question": ar.question,
@@ -497,7 +487,7 @@ class Pipeline:
             "golden_answer": ar.golden_answer,
             "category": ar.category,
             "conversation_id": ar.conversation_id,
-            "search_results": search_results,
+            "formatted_context": ar.formatted_context,
             "metadata": ar.metadata,
         }
     

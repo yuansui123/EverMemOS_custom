@@ -251,6 +251,7 @@ IMPORTANT: This is a multiple-choice question. You MUST analyze the context and 
                 golden_answer=result_dict["golden_answer"],
                 category=result_dict.get("category"),
                 conversation_id=result_dict.get("conversation_id", ""),
+                formatted_context=result_dict.get("formatted_context", ""),
                 search_results=result_dict.get("search_results", []),
             ))
     

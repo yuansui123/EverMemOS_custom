@@ -107,6 +107,7 @@ The evaluation framework reuses most environment variables from the main Evermem
 - `LLM_API_KEY`, `LLM_BASE_URL` (for answer generation)
 - `DEEPINFRA_API_KEY` (for embeddings/reranker)
 
+For testing EvermemOS, please first configure the whole .env file.
 
 **Additional variables for online API systems** (add to `.env` if testing these systems):
 
@@ -147,9 +148,11 @@ Run the complete benchmark:
 uv run python -m evaluation.cli --dataset locomo --system evermemos
 
 # Evaluate other systems
-uv run python -m evaluation.cli --dataset locomo --system mem0
 uv run python -m evaluation.cli --dataset locomo --system memos
 uv run python -m evaluation.cli --dataset locomo --system memu
+# For mem0, it's recommended to run add first, check the memory status on the web console to make sure it's finished and then following stages.
+uv run python -m evaluation.cli --dataset locomo --system mem0 --stages add
+uv run python -m evaluation.cli --dataset locomo --system mem0 --stages search answer evaluate
 
 # Evaluate on other datasets
 uv run python -m evaluation.cli --dataset longmemeval --system evermemos
@@ -169,7 +172,7 @@ uv run python -m evaluation.cli --dataset locomo --system evermemos
 
 ### View Results
 
-Results are saved to `evaluation/results/{dataset}-{system}/`:
+Results are saved to `evaluation/results/{dataset}-{system}[-{run-name}]/`:
 
 ```bash
 # View summary report
@@ -205,25 +208,26 @@ Check `eval_results.json` for per-question breakdown:
 
 ```json
 {
-  "overall_accuracy": ...,
   "total_questions": ...,
-  "correct_count": ...,
-  "detailed_results": [
-    {
-      "question_id": "locomo_0_qa0",
-      "question": "What is my favorite food?",
-      "golden_answer": "Pizza",
-      "generated_answer": "Your favorite food is pizza.",
-      "is_correct": true,
-      "judgments": [
-        true,
-        true,
-        true
-      ],
-      "category": "1"
-    }
-    ...
-  ]
+  "correct": ...,
+  "accuracy": ...,
+  "detailed_results": {
+      "locomo_exp_user_0": [
+         {
+            "question_id": "locomo_0_qa0",
+            "question": "What is my favorite food?",
+            "golden_answer": "Pizza",
+            "generated_answer": "Your favorite food is pizza.",
+            "judgments": [
+               true,
+               true,
+               true
+            ],
+            "category": "1"
+         }
+         ...
+      ]
+  }
 }
 ```
 
@@ -262,6 +266,16 @@ uv run python -m evaluation.cli --dataset locomo --system evermemos --stages sea
 uv run python -m evaluation.cli --dataset locomo --system evermemos \
     --stages search answer evaluate
 ```
+If you have already done search, and you want to do it again, please remove the "search" (and following stages from the completed_stages in the checkpoint_default.json file):
+```
+  "completed_stages": [
+    "answer",
+    "search",
+    "evaluate",
+    "add"
+  ]
+```
+
 
 ### Custom Configuration
 

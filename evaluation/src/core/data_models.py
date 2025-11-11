@@ -68,7 +68,7 @@ class AnswerResult:
     golden_answer: str
     category: Optional[int] = None
     conversation_id: str = ""
-    formatted_context: str = ""  # 🔥 实际使用的上下文（替代 search_results）
+    formatted_context: str = ""  # 实际使用的上下文
     search_results: List[Dict[str, Any]] = field(default_factory=list)  # 可选：详细检索结果（用于调试）
     metadata: Dict[str, Any] = field(default_factory=dict)
 
