@@ -74,9 +74,7 @@ def get_default_kafka_config() -> Dict[str, Any]:
     # 处理CA证书路径
     ca_file_path = None
     if os.getenv("CA_FILE_PATH"):
-        ca_file_path = get_ca_file_path(
-            os.getenv("CA_FILE_PATH", "kafka/ca_file/AmazonRootCA1.pem")
-        )
+        ca_file_path = get_ca_file_path(os.getenv("CA_FILE_PATH", ""))
 
     config = {
         "kafka_servers": kafka_servers,
