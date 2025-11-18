@@ -12,6 +12,9 @@ data:
   # Converter will look for:
   # - longmemeval/longmemeval_s_cleaned.json (raw)
   # - longmemeval/longmemeval_s_locomo_style.json (converted, auto-generated)
+  
+  # Content length limit (for very long messages)
+  max_content_length: 8000  # Truncate messages longer than this (characters)
 
 # Evaluation configuration
 evaluation:
@@ -25,6 +28,6 @@ evaluation:
   
   num_runs: 3
   
-  # LongMemEval categories: "single-session-user", "multi-session-user" 等
-  filter_category: []  # 如需过滤，添加到列表：["single-session-user", ...]
+  # LongMemEval categories: "single-session-user", "multi-session-user", etc.
+  filter_category: []  # If you need to filter, add to the list: ["single-session-user", ...]
 

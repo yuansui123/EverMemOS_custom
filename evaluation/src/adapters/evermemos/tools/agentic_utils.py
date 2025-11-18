@@ -1,10 +1,10 @@
 """
-Agentic Retrieval 工具函数
+Agentic Retrieval utility functions.
 
-提供 LLM 引导的多轮检索所需的工具：
-1. Sufficiency Check: 判断检索结果是否充分
-2. Query Refinement: 生成改进的查询
-3. Document Formatting: 格式化文档供 LLM 使用
+Provides tools for LLM-guided multi-round retrieval:
+1. Sufficiency Check: Determine if retrieval results are sufficient
+2. Query Refinement: Generate improved queries
+3. Document Formatting: Format documents for LLM consumption
 """
 
 import json
@@ -12,7 +12,7 @@ import asyncio
 from pathlib import Path
 from typing import List, Tuple, Optional
 
-# 从 Python 文件导入 prompts（替代读取 txt 文件）
+# Import prompts from Python files
 from evaluation.src.adapters.evermemos.prompts.sufficiency_check_prompts import SUFFICIENCY_CHECK_PROMPT
 from evaluation.src.adapters.evermemos.prompts.refined_query_prompts import REFINED_QUERY_PROMPT
 from evaluation.src.adapters.evermemos.prompts.multi_query_prompts import MULTI_QUERY_GENERATION_PROMPT
@@ -24,27 +24,27 @@ def format_documents_for_llm(
     use_episode: bool = True
 ) -> str:
     """
-    格式化检索结果供 LLM 使用
+    Format retrieval results for LLM consumption.
     
     Args:
-        results: 检索结果列表 [(doc, score), ...]
-        max_docs: 最多包含的文档数
-        use_episode: True=使用 Episode Memory，False=使用 Event Log
+        results: Retrieval results [(doc, score), ...]
+        max_docs: Maximum number of documents to include
+        use_episode: True=use Episode Memory, False=use Event Log
     
     Returns:
-        格式化的文档字符串
+        Formatted document string
     """
     formatted_docs = []
     
     for i, (doc, score) in enumerate(results[:max_docs], start=1):
         subject = doc.get("subject", "N/A")
         
-        # 🔥 根据 use_episode 参数选择格式
+        # Choose format based on use_episode parameter
         if use_episode:
-            # 使用 Episode Memory 格式（完整叙述）
+            # Use Episode Memory format (full narrative)
             episode = doc.get("episode", "N/A")
             
-            # 限制 episode 长度（避免 prompt 过长）
+            # Limit episode length to avoid overly long prompts
             if len(episode) > 500:
                 episode = episode[:500] + "..."
             
@@ -55,15 +55,15 @@ def format_documents_for_llm(
             )
             formatted_docs.append(doc_text)
         else:
-            # 使用 Event Log 格式（原子事实）
+            # Use Event Log format (atomic facts)
             if doc.get("event_log") and doc["event_log"].get("atomic_fact"):
                 event_log = doc["event_log"]
                 time_str = event_log.get("time", "N/A")
                 atomic_facts = event_log.get("atomic_fact", [])
                 
                 if isinstance(atomic_facts, list) and atomic_facts:
-                    # 格式化为：Document N: 标题 + 时间 + 事实列表
-                    facts_text = "\n     ".join(atomic_facts[:5])  # 最多显示 5 个 facts
+                    # Format as: Document N: title + time + fact list
+                    facts_text = "\n     ".join(atomic_facts[:5])  # Show max 5 facts
                     if len(atomic_facts) > 5:
                         facts_text += f"\n     ... and {len(atomic_facts) - 5} more facts"
                     
@@ -77,7 +77,7 @@ def format_documents_for_llm(
                     formatted_docs.append(doc_text)
                     continue
             
-            # 如果没有 event_log，回退到 episode
+            # Fall back to episode if no event_log
             episode = doc.get("episode", "N/A")
             if len(episode) > 500:
                 episode = episode[:500] + "..."
@@ -94,16 +94,16 @@ def format_documents_for_llm(
 
 def parse_json_response(response: str) -> dict:
     """
-    解析 LLM 的 JSON 响应（健壮处理）
+    Parse LLM JSON response with robust error handling.
     
     Args:
-        response: LLM 原始响应字符串
+        response: Raw LLM response string
     
     Returns:
-        解析后的 JSON 字典
+        Parsed JSON dictionary
     """
     try:
-        # 尝试提取 JSON（LLM 可能在前后添加额外文本）
+        # Extract JSON (LLM may add extra text before/after)
         start_idx = response.find("{")
         end_idx = response.rfind("}") + 1
         
@@ -113,11 +113,11 @@ def parse_json_response(response: str) -> dict:
         json_str = response[start_idx:end_idx]
         result = json.loads(json_str)
         
-        # 验证必需字段
+        # Validate required fields
         if "is_sufficient" not in result:
             raise ValueError("Missing 'is_sufficient' field")
         
-        # 设置默认值
+        # Set default values
         result.setdefault("reasoning", "No reasoning provided")
         result.setdefault("missing_information", [])
         
@@ -127,7 +127,7 @@ def parse_json_response(response: str) -> dict:
         print(f"  ⚠️  Failed to parse LLM response: {e}")
         print(f"  Raw response: {response[:200]}...")
         
-        # 保守回退：假设充分（避免不必要的第二轮检索）
+        # Conservative fallback: assume sufficient to avoid unnecessary second round
         return {
             "is_sufficient": True,
             "reasoning": f"Failed to parse: {str(e)}",
@@ -137,29 +137,29 @@ def parse_json_response(response: str) -> dict:
 
 def parse_refined_query(response: str, original_query: str) -> str:
     """
-    解析改进后的查询
+    Parse refined query from LLM response.
     
     Args:
-        response: LLM 响应
-        original_query: 原始查询（用于回退）
+        response: LLM response
+        original_query: Original query (for fallback)
     
     Returns:
-        改进后的查询字符串
+        Refined query string
     """
     refined = response.strip()
     
-    # 移除常见前缀
+    # Remove common prefixes
     prefixes = ["Refined Query:", "Output:", "Answer:", "Query:"]
     for prefix in prefixes:
         if refined.startswith(prefix):
             refined = refined[len(prefix):].strip()
     
-    # 验证长度
+    # Validate length
     if len(refined) < 5 or len(refined) > 300:
         print(f"  ⚠️  Invalid refined query length ({len(refined)}), using original")
         return original_query
     
-    # 避免与原查询完全相同
+    # Avoid identical query
     if refined.lower() == original_query.lower():
         print(f"  ⚠️  Refined query identical to original, using original")
         return original_query
@@ -170,45 +170,45 @@ def parse_refined_query(response: str, original_query: str) -> str:
 async def check_sufficiency(
     query: str,
     results: List[Tuple[dict, float]],
-    llm_provider,  # 改用 LLMProvider
+    llm_provider,
     llm_config: dict,
     max_docs: int = 10
 ) -> Tuple[bool, str, List[str]]:
     """
-    检查检索结果是否充分
+    Check if retrieval results are sufficient.
     
     Args:
-        query: 用户查询
-        results: 检索结果（Top 10）
+        query: User query
+        results: Retrieval results (Top 10)
         llm_provider: LLM Provider (Memory Layer)
-        llm_config: LLM 配置字典
-        max_docs: 最多评估的文档数
+        llm_config: LLM configuration dict
+        max_docs: Maximum number of documents to evaluate
     
     Returns:
         (is_sufficient, reasoning, missing_information)
     """
     try:
-        # 1. 格式化文档（🔥 使用 Episode Memory 格式）
+        # Format documents (using Episode Memory format)
         retrieved_docs = format_documents_for_llm(
             results, 
             max_docs=max_docs,
-            use_episode=True  # 🔥 强制使用 Episode Memory
+            use_episode=True
         )
         
-        # 2. 使用 prompt 模板
+        # Use prompt template
         prompt = SUFFICIENCY_CHECK_PROMPT.format(
             query=query,
             retrieved_docs=retrieved_docs
         )
         
-        # 3. 调用 LLM（使用 LLMProvider）
+        # Call LLM (using LLMProvider)
         result_text = await llm_provider.generate(
             prompt=prompt,
-            temperature=0.0,  # 低温度，判断更稳定
+            temperature=0.0,  # Low temperature for stable judgment
             max_tokens=500,
         )
         
-        # 4. 解析 JSON 响应
+        # Parse JSON response
         result = parse_json_response(result_text)
         
         return (
@@ -219,13 +219,13 @@ async def check_sufficiency(
     
     except asyncio.TimeoutError:
         print(f"  ❌ Sufficiency check timeout (30s)")
-        # 超时回退：假设充分
+        # Timeout fallback: assume sufficient
         return True, "Timeout: LLM took too long", []
     except Exception as e:
         print(f"  ❌ Sufficiency check failed: {e}")
         import traceback
         traceback.print_exc()
-        # 保守回退：假设充分
+        # Conservative fallback: assume sufficient
         return True, f"Error: {str(e)}", []
 
 
@@ -233,77 +233,77 @@ async def generate_refined_query(
     original_query: str,
     results: List[Tuple[dict, float]],
     missing_info: List[str],
-    llm_client,
+    llm_provider,
     llm_config: dict,
     max_docs: int = 10
 ) -> str:
     """
-    生成改进的查询
+    Generate improved query.
     
     Args:
-        original_query: 原始查询
-        results: Round 1 检索结果（Top 10）
-        missing_info: 缺失的信息列表
-        llm_client: LLM 客户端
-        llm_config: LLM 配置
-        max_docs: 最多使用的文档数
+        original_query: Original query
+        results: Round 1 retrieval results (Top 10)
+        missing_info: List of missing information
+        llm_client: LLM client
+        llm_config: LLM configuration
+        max_docs: Maximum number of documents to use
     
     Returns:
-        改进后的查询字符串
+        Refined query string
     """
     try:
-        # 1. 格式化文档和缺失信息（🔥 使用 Episode Memory 格式）
+        # Format documents and missing info (using Episode Memory format)
         retrieved_docs = format_documents_for_llm(
             results, 
             max_docs=max_docs,
-            use_episode=True  # 🔥 强制使用 Episode Memory
+            use_episode=True
         )
         missing_info_str = ", ".join(missing_info) if missing_info else "N/A"
         
-        # 2. 使用 prompt 模板
+        # Use prompt template
         prompt = REFINED_QUERY_PROMPT.format(
             original_query=original_query,
             retrieved_docs=retrieved_docs,
             missing_info=missing_info_str
         )
         
-        # 3. 调用 LLM（使用 LLMProvider）
+        # Call LLM (using LLMProvider)
         result_text = await llm_provider.generate(
             prompt=prompt,
-            temperature=0.3,  # 稍高温度，增加创造性
+            temperature=0.3,  # Higher temperature for creativity
             max_tokens=150,
         )
         
-        # 4. 解析和验证
+        # Parse and validate
         refined_query = parse_refined_query(result_text, original_query)
         
         return refined_query
     
     except asyncio.TimeoutError:
         print(f"  ❌ Query refinement timeout (30s)")
-        # 超时回退：使用原始查询
+        # Timeout fallback: use original query
         return original_query
     except Exception as e:
         print(f"  ❌ Query refinement failed: {e}")
         import traceback
         traceback.print_exc()
-        # 回退到原始查询
+        # Fall back to original query
         return original_query
 
 
 def parse_multi_query_response(response: str, original_query: str) -> Tuple[List[str], str]:
     """
-    解析多查询生成的 JSON 响应
+    Parse multi-query generation JSON response.
     
     Args:
-        response: LLM 原始响应字符串
-        original_query: 原始查询（用于回退）
+        response: Raw LLM response string
+        original_query: Original query (for fallback)
     
     Returns:
         (queries_list, reasoning)
     """
     try:
-        # 提取 JSON
+        # Extract JSON
         start_idx = response.find("{")
         end_idx = response.rfind("}") + 1
         
@@ -313,27 +313,27 @@ def parse_multi_query_response(response: str, original_query: str) -> Tuple[List
         json_str = response[start_idx:end_idx]
         result = json.loads(json_str)
         
-        # 验证必需字段
+        # Validate required fields
         if "queries" not in result or not isinstance(result["queries"], list):
             raise ValueError("Missing or invalid 'queries' field")
         
         queries = result["queries"]
         reasoning = result.get("reasoning", "No reasoning provided")
         
-        # 过滤和验证查询
+        # Filter and validate queries
         valid_queries = []
         for q in queries:
             if isinstance(q, str) and 5 <= len(q) <= 300:
-                # 避免与原查询完全相同
+                # Avoid identical to original query
                 if q.lower().strip() != original_query.lower().strip():
                     valid_queries.append(q.strip())
         
-        # 至少返回 1 个查询
+        # Return at least 1 query
         if not valid_queries:
             print(f"  ⚠️  No valid queries generated, using original")
             return [original_query], "Fallback: used original query"
         
-        # 限制最多 3 个查询
+        # Limit to maximum 3 queries
         valid_queries = valid_queries[:3]
         
         print(f"  ✅ Generated {len(valid_queries)} valid queries")
@@ -343,7 +343,7 @@ def parse_multi_query_response(response: str, original_query: str) -> Tuple[List
         print(f"  ⚠️  Failed to parse multi-query response: {e}")
         print(f"  Raw response: {response[:200]}...")
         
-        # 回退：返回原始查询
+        # Fallback: return original query
         return [original_query], f"Parse error: {str(e)}"
 
 
@@ -351,52 +351,52 @@ async def generate_multi_queries(
     original_query: str,
     results: List[Tuple[dict, float]],
     missing_info: List[str],
-    llm_provider,  # 改用 LLMProvider
+    llm_provider,
     llm_config: dict,
     max_docs: int = 5,
     num_queries: int = 3
 ) -> Tuple[List[str], str]:
     """
-    生成多个互补的查询（用于多查询检索）
+    Generate multiple complementary queries for multi-query retrieval.
     
     Args:
-        original_query: 原始查询
-        results: Round 1 检索结果（Top 5）
-        missing_info: 缺失的信息列表
-        llm_client: LLM 客户端
-        llm_config: LLM 配置
-        max_docs: 最多使用的文档数（默认 5）
-        num_queries: 期望生成的查询数量（默认 3，实际可能更少）
+        original_query: Original query
+        results: Round 1 retrieval results (Top 5)
+        missing_info: List of missing information
+        llm_client: LLM client
+        llm_config: LLM configuration
+        max_docs: Maximum number of documents to use (default 5)
+        num_queries: Expected number of queries to generate (default 3, may be fewer)
     
     Returns:
         (queries_list, reasoning)
-        queries_list: 生成的查询列表（1-3 个）
-        reasoning: LLM 的生成策略说明
+        queries_list: Generated query list (1-3 queries)
+        reasoning: LLM generation strategy explanation
     """
     try:
-        # 1. 格式化文档和缺失信息（🔥 使用 Episode Memory 格式）
+        # Format documents and missing info (using Episode Memory format)
         retrieved_docs = format_documents_for_llm(
             results, 
             max_docs=max_docs,
-            use_episode=True  # 🔥 强制使用 Episode Memory
+            use_episode=True
         )
         missing_info_str = ", ".join(missing_info) if missing_info else "N/A"
         
-        # 2. 使用 prompt 模板
+        # Use prompt template
         prompt = MULTI_QUERY_GENERATION_PROMPT.format(
             original_query=original_query,
             retrieved_docs=retrieved_docs,
             missing_info=missing_info_str
         )
         
-        # 3. 调用 LLM（使用 LLMProvider）
+        # Call LLM (using LLMProvider)
         result_text = await llm_provider.generate(
             prompt=prompt,
-            temperature=0.4,  # 稍高温度，增加查询多样性
-            max_tokens=300,  # 增加 token 数以支持多个查询
+            temperature=0.4,  # Higher temperature for query diversity
+            max_tokens=300,  # Increased tokens to support multiple queries
         )
         
-        # 4. 解析和验证
+        # Parse and validate
         queries, reasoning = parse_multi_query_response(result_text, original_query)
         
         print(f"  [Multi-Query] Generated {len(queries)} queries:")
@@ -408,12 +408,11 @@ async def generate_multi_queries(
     
     except asyncio.TimeoutError:
         print(f"  ❌ Multi-query generation timeout (30s)")
-        # 超时回退：使用原始查询
         return [original_query], "Timeout: used original query"
     except Exception as e:
         print(f"  ❌ Multi-query generation failed: {e}")
         import traceback
         traceback.print_exc()
-        # 回退到原始查询
+        # Fall back to original query
         return [original_query], f"Error: {str(e)}"
 

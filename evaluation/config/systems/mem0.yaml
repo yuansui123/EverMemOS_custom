@@ -11,14 +11,13 @@ api_key: "${MEM0_API_KEY}"
 batch_size: 5  # Number of messages to batch per API call
 max_retries: 5  # Number of retries for failed API calls
 max_content_length: 8000  # Maximum content length per message (API limit)
+add_interval: 0.5  # Seconds to wait between add requests (to avoid rate limits)
 
-# 数据清理配置
-# 在 add 阶段前是否清理已有数据（确保实验结果可复现）
-clean_before_add: false  # Set to true to delete all existing memories before adding new ones
+# Concurrency configuration
+num_workers: 5  # Number of concurrent conversations to process
 
-
-# ⏰ Post-Add Wait: 等待后台索引构建完成（如果需要的话）
-post_add_wait_seconds: 180  # 设置为 0 表示不等待，如发现需要可调整
+# ⏰ Post-Add Wait: Wait for background index build to complete (if needed)
+post_add_wait_seconds: 180  # Set to 0 to not wait, adjust if needed
 
 # LLM configuration (for answer generation)
 llm:
@@ -31,7 +30,8 @@ llm:
 
 # Search configuration
 search:
-  top_k: 20
+  top_k: 20  # Number of results per user (in dual-perspective mode, total = 2 * top_k)
+  search_interval: 0.5  # Seconds to wait between search requests (to avoid 429 errors)
 
 # Answer configuration
 answer:

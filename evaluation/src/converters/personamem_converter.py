@@ -1,7 +1,5 @@
 """
-PersonaMem Converter
-
-将 PersonaMem 数据集转换为 Locomo 格式。
+PersonaMem Converter - convert PersonaMem dataset to Locomo format.
 """
 import json
 import csv
@@ -16,7 +14,7 @@ from evaluation.src.converters.registry import register_converter
 
 
 def extract_persona_name(system_content: str) -> str:
-    """从 system message 中提取 persona 名字"""
+    """Extract persona name from system message."""
     match = re.search(r'Name:\s*([^\n]+)', system_content)
     if match:
         return match.group(1).strip()
@@ -24,24 +22,13 @@ def extract_persona_name(system_content: str) -> str:
 
 
 def clean_message_prefix(text: str) -> str:
-    """清理消息中的 'User:' 和 'Assistant:' 前缀"""
+    """Clean 'User:' and 'Assistant:' prefixes from messages."""
     text = re.sub(r'^(User|Assistant):\s*', '', text, flags=re.MULTILINE)
     return text.strip()
 
 
-# 注：不再需要类型转换，保留原始 question_type
-# PersonaMem 有 7 种 question_type：
-# - recall_user_shared_facts (129)
-# - provide_preference_aligned_recommendations (55)
-# - suggest_new_ideas (93)
-# - recalling_the_reasons_behind_previous_updates (99)
-# - track_full_preference_evolution (139)
-# - generalizing_to_new_scenarios (57)
-# - recalling_facts_mentioned_by_the_user (17)
-
-
 def parse_options(options_str: str) -> Dict[str, str]:
-    """解析 all_options 字符串，返回字典"""
+    """Parse all_options string, return dict."""
     try:
         options_list = ast.literal_eval(options_str)
         options_dict = {}
@@ -59,33 +46,33 @@ def parse_options(options_str: str) -> Dict[str, str]:
 
 @register_converter("personamem")
 class PersonaMemConverter(BaseConverter):
-    """PersonaMem 数据集转换器"""
+    """PersonaMem dataset converter."""
     
     def get_input_files(self) -> Dict[str, str]:
-        """返回需要的输入文件"""
+        """Return required input files."""
         return {
             "questions": "questions_32k.csv",
             "contexts": "shared_contexts_32k.jsonl"
         }
     
     def get_output_filename(self) -> str:
-        """返回输出文件名"""
+        """Return output filename."""
         return "personamem_32k_locomo_style.json"
     
     def convert(self, input_paths: Dict[str, str], output_path: str) -> None:
         """
-        执行转换
+        Execute conversion.
         
         Args:
             input_paths: {
                 "questions": "path/to/questions_32k.csv",
                 "contexts": "path/to/shared_contexts_32k.jsonl"
             }
-            output_path: 输出文件路径
+            output_path: Output file path
         """
         print(f"🔄 Converting PersonaMem to Locomo format...")
         
-        # 1. 读取 JSONL 文件，构建 context 字典
+        # 1. Read JSONL file, build context dict
         print("   Loading shared contexts...")
         contexts = {}
         with open(input_paths["contexts"], 'r', encoding='utf-8') as f:
@@ -94,7 +81,7 @@ class PersonaMemConverter(BaseConverter):
                 contexts.update(data)
         print(f"   Loaded {len(contexts)} shared contexts")
         
-        # 2. 读取 CSV 文件
+        # 2. Read CSV file
         print("   Loading questions...")
         questions = []
         with open(input_paths["questions"], 'r', encoding='utf-8') as f:
@@ -102,7 +89,7 @@ class PersonaMemConverter(BaseConverter):
             questions = list(reader)
         print(f"   Loaded {len(questions)} questions")
         
-        # 3. 按 (shared_context_id, end_index_in_shared_context) 分组
+        # 3. Group by (shared_context_id, end_index_in_shared_context)
         print("   Grouping questions...")
         grouped_questions = defaultdict(list)
         for q in questions:
@@ -110,12 +97,12 @@ class PersonaMemConverter(BaseConverter):
             grouped_questions[key].append(q)
         print(f"   Grouped into {len(grouped_questions)} unique context groups")
         
-        # 4. 转换为 Locomo 格式
+        # 4. Convert to Locomo format
         print("   Converting to Locomo format...")
         locomo_data = []
         
         for (context_id, end_index), question_list in grouped_questions.items():
-            # 获取对应的 context
+            # Get corresponding context
             if context_id not in contexts:
                 print(f"   Warning: context_id {context_id} not found")
                 continue
@@ -123,24 +110,24 @@ class PersonaMemConverter(BaseConverter):
             full_context = contexts[context_id]
             context_messages = full_context[:end_index + 1]
             
-            # 提取 persona 名字
+            # Extract persona name
             persona_name = "User"
             assistant_name = "Assistant"
             if context_messages and context_messages[0]['role'] == 'system':
                 persona_name = extract_persona_name(context_messages[0]['content'])
             
-            # 创建 Locomo 条目
+            # Create Locomo entry
             locomo_entry = {
                 "qa": [],
                 "conversation": {
                     "speaker_a": persona_name,
                     "speaker_b": assistant_name,
-                    "session_0_date_time": "Unknown",  # PersonaMem 没有时间信息
+                    "session_0_date_time": "Unknown",  # PersonaMem lacks timestamp info
                     "session_0": []
                 }
             }
             
-            # 添加所有问题到 qa 列表
+            # Add all questions to qa list
             for q in question_list:
                 options = parse_options(q['all_options'])
                 correct_answer_text = options.get(q['correct_answer'], q['correct_answer'])
@@ -152,7 +139,7 @@ class PersonaMemConverter(BaseConverter):
                     "answer_text": correct_answer_text,
                     "all_options": options,
                     "evidence": [],
-                    "category": q['question_type'],  # 保留原始类型，不做转换
+                    "category": q['question_type'],  # Keep original type, no conversion
                     "topic": q['topic'],
                     "persona_id": q['persona_id'],
                     "context_length_in_tokens": int(q['context_length_in_tokens']),
@@ -160,11 +147,11 @@ class PersonaMemConverter(BaseConverter):
                 }
                 locomo_entry["qa"].append(qa_item)
             
-            # 构建对话列表
+            # Build dialogue list
             dialogue_idx = 0
             for msg in context_messages:
                 if msg['role'] == 'system':
-                    continue  # 跳过 system message
+                    continue  # Skip system message
                 
                 speaker = persona_name if msg['role'] == 'user' else assistant_name
                 cleaned_text = clean_message_prefix(msg['content'])
@@ -179,7 +166,7 @@ class PersonaMemConverter(BaseConverter):
             
             locomo_data.append(locomo_entry)
         
-        # 5. 保存结果
+        # 5. Save result
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(locomo_data, f, indent=2, ensure_ascii=False)
         

@@ -1,7 +1,7 @@
 # Memu System Configuration
 # 
-# Memu 使用 HTTP RESTful API 直接调用，无需 Python SDK
-# 参考文档：https://memu.pro/docs#memory-apis
+# Memu uses HTTP RESTful API directly, without Python SDK
+# Reference documentation: https://memu.pro/docs#memory-apis
 
 name: "memu"
 version: "1.0"
@@ -11,19 +11,28 @@ adapter: "memu"
 
 # Memu API configuration
 api_key: "${MEMU_API_KEY}"
-base_url: "https://api.memu.so"  # Memu 官方 API 地址
+base_url: "https://api.memu.so"  # Memu official API address
 max_retries: 5
 
-# Agent configuration (用于标识对话方)
-agent_id: "evaluation_agent_02"
+# Agent configuration (for identifying dialog partners)
+agent_id: "evaluation_agent_04"
 agent_name: "Memory Evaluation Assistant"
 
-# 任务状态检查配置
-task_check_interval: 15  # 检查任务状态的间隔（秒）
-task_timeout: 3600  # 任务超时时间（秒），建议 90-120 秒
 
-# 搜索配置
-min_similarity: 0.3  # 最小相似度阈值（0-1）
+# Task status check configuration
+task_check_interval: 15  # Task status check interval (seconds)
+task_timeout: 4800  # Task timeout (seconds), recommended 90-120 seconds
+
+# Concurrency configuration
+num_workers: 1  # Number of concurrent conversations to process (default for most datasets)
+
+# Dataset-specific overrides
+dataset_overrides:
+  locomo:
+    num_workers: 1  # LoCoMo dataset requires lower concurrency
+
+# Search configuration
+min_similarity: 0.3  # Minimum similarity threshold (0-1)
 
 # LLM configuration (for answer generation)
 llm:

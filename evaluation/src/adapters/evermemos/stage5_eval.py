@@ -88,13 +88,12 @@ async def process_group_responses(
 ):
     graded_responses = []
 
-    # 🔥 只在非禁用模式下显示进度条
     # Process responses with asyncio for concurrent API calls
     for response in tqdm(
         group_responses, 
         desc=f"Processing {group_id}", 
         disable=disable_progress,
-        leave=False  # 完成后清除进度条
+        leave=False  # Clear progress bar after completion
     ):
         question = response.get("question")
         answer = response.get("answer")
@@ -142,7 +141,7 @@ async def process_single_group(
         )
         end_time = time.time()
         elapsed_time = round(end_time - start_time, 2)
-        # 🔥 减少输出：只在出错或重要时刻打印
+        # Reduced output: only print on error or important moments
         # print(f"Group {group_id} processed in {elapsed_time} seconds")
         return result
     except Exception as e:
@@ -157,15 +156,13 @@ async def main():
     num_runs = 3
     max_workers = 10
 
-    # 🔥 简化输出
     print(f"\n{'='*60}")
     print(f"🔍 Stage5: LLM-as-a-Judge Evaluation")
     print(f"{'='*60}")
 
     # --- Path Setup ---
     current_dir = Path(__file__).parent
-    # 🔥 修正：实际文件在 locomo_evaluation/ 目录下，而不是 results/ 目录
-    results_dir = current_dir / version  # 直接使用 version（即 "locomo_evaluation"）
+    results_dir = current_dir / version
     response_path = results_dir / "responses.json"
     judged_path = results_dir / "judged.json"
 
@@ -205,13 +202,12 @@ async def main():
         group_id = f"locomo_exp_user_{group_idx}"
         group_responses = locomo_responses.get(group_id, [])
         if not group_responses:
-            # 🔥 减少输出：跳过空组不打印
             continue
 
         active_users += 1
         tasks.append(
             process_single_group(
-                group_id, group_responses, oai_client, num_runs, disable_progress=True  # 🔥 禁用单组进度条
+                group_id, group_responses, oai_client, num_runs, disable_progress=True  # Disable individual group progress bar
             )
         )
 
@@ -225,7 +221,7 @@ async def main():
 
     limited_tasks = [limited_task(task) for task in tasks]
     
-    # 🔥 添加总体进度条
+    # Add overall progress bar
     group_results = []
     for coro in tqdm(
         asyncio.as_completed(limited_tasks),
@@ -265,7 +261,7 @@ async def main():
         if current_run_total_count > 0:
             evaluated_count = current_run_total_count
 
-    # 🔥 简化并美化结果输出
+    # Simplified and formatted result output
     if evaluated_count > 0:
         mean_of_scores = np.mean(run_scores)
         std_of_scores = np.std(run_scores)

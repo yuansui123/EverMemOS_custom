@@ -1,7 +1,7 @@
 """
-日志工具
+Logging utilities.
 
-提供统一的日志记录功能。
+Provides unified logging functionality.
 """
 import logging
 from pathlib import Path
@@ -16,23 +16,23 @@ def setup_logger(
     name: str = "evaluation"
 ) -> logging.Logger:
     """
-    设置日志器
+    Setup logger.
     
     Args:
-        log_file: 日志文件路径（可选）
-        level: 日志级别
-        name: 日志器名称
+        log_file: Log file path (optional)
+        level: Log level
+        name: Logger name
         
     Returns:
-        配置好的 Logger 实例
+        Configured Logger instance
     """
     logger = logging.getLogger(name)
     logger.setLevel(level)
     
-    # 清除已有的 handlers
+    # Clear existing handlers
     logger.handlers.clear()
     
-    # 添加 Rich Console Handler（彩色输出）
+    # Add Rich Console Handler (colored output)
     console_handler = RichHandler(
         rich_tracebacks=True,
         show_time=False,
@@ -41,7 +41,7 @@ def setup_logger(
     console_handler.setLevel(level)
     logger.addHandler(console_handler)
     
-    # 添加文件 Handler（如果指定了日志文件）
+    # Add file Handler (if log file is specified)
     if log_file:
         log_file.parent.mkdir(parents=True, exist_ok=True)
         file_handler = logging.FileHandler(log_file, encoding='utf-8')
@@ -56,6 +56,6 @@ def setup_logger(
 
 
 def get_console() -> Console:
-    """获取 Rich Console 实例"""
+    """Get Rich Console instance."""
     return Console()
 

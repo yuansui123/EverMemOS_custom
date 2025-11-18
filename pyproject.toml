@@ -170,10 +170,7 @@ evaluation-full = [
     {include-group = "evaluation"},
     # Online Memory Systems API 客户端
     "mem0ai>=1.0.0",          # Mem0
-    "zep-cloud>=3.9.0",       # Zep
-    "memobase>=0.0.26",       # Memobase
-    "supermemory>=3.4.0",     # Supermemory
-    #"memu-py>=0.2.2",         # Memu
+    "zep-cloud>=2.0.0",       # Zep
 ]
 
 [project.scripts]

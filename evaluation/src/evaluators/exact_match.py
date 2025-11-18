@@ -1,7 +1,5 @@
 """
-Exact Match 评估器
-
-用于直接对比答案是否完全匹配，适用于选择题等场景。
+Exact Match evaluator - direct answer comparison, suitable for multiple-choice scenarios.
 """
 import re
 from typing import List
@@ -13,34 +11,34 @@ from evaluation.src.core.data_models import AnswerResult, EvaluationResult
 
 @register_evaluator("exact_match")
 class ExactMatch(BaseEvaluator):
-    """精确匹配评估器"""
+    """Exact match evaluator."""
     
     def __init__(self, config: dict):
         """
-        初始化评估器
+        Initialize evaluator.
         
         Args:
-            config: 评估配置（可选参数：case_sensitive, normalize_whitespace）
+            config: Evaluation config (optional: case_sensitive, normalize_whitespace)
         """
         super().__init__(config)
         
-        # 配置选项
-        self.case_sensitive = config.get("case_sensitive", False)  # 默认不区分大小写
-        self.normalize_whitespace = config.get("normalize_whitespace", True)  # 默认规范化空白字符
-        self.extract_choice = config.get("extract_choice", True)  # 默认提取选项（如 (a), (b), (c)）
+        # Config options
+        self.case_sensitive = config.get("case_sensitive", False)  # Default: case insensitive
+        self.normalize_whitespace = config.get("normalize_whitespace", True)  # Default: normalize whitespace
+        self.extract_choice = config.get("extract_choice", True)  # Default: extract choices like (a), (b), (c)
     
     async def evaluate(
         self, 
         answer_results: List[AnswerResult]
     ) -> EvaluationResult:
         """
-        使用精确匹配评估答案
+        Evaluate answers using exact match.
         
         Args:
-            answer_results: 答案结果列表
+            answer_results: List of answer results
             
         Returns:
-            EvaluationResult: 评估结果
+            Evaluation result
         """
         print(f"\n{'='*60}")
         print(f"Evaluation: Exact Match")
@@ -52,7 +50,7 @@ class ExactMatch(BaseEvaluator):
         detailed_results = []
         total_correct = 0
         
-        # 评估每个答案
+        # Evaluate each answer
         for answer_result in answer_results:
             is_correct = self._check_match(
                 answer_result.golden_answer,
@@ -73,10 +71,10 @@ class ExactMatch(BaseEvaluator):
         
         accuracy = total_correct / len(answer_results) if answer_results else 0.0
         
-        print(f"\n✅ 评估完成:")
-        print(f"   - 总问题数: {len(answer_results)}")
-        print(f"   - 正确: {total_correct}")
-        print(f"   - 准确率: {accuracy:.2%}")
+        print(f"\n✅ Evaluation complete:")
+        print(f"   - Total questions: {len(answer_results)}")
+        print(f"   - Correct: {total_correct}")
+        print(f"   - Accuracy: {accuracy:.2%}")
         
         return EvaluationResult(
             total_questions=len(answer_results),
@@ -93,26 +91,26 @@ class ExactMatch(BaseEvaluator):
     
     def _check_match(self, golden: str, generated: str) -> bool:
         """
-        检查两个答案是否匹配
+        Check if two answers match.
         
         Args:
-            golden: 标准答案
-            generated: 生成的答案
+            golden: Golden answer
+            generated: Generated answer
             
         Returns:
-            是否匹配
+            Whether answers match
         """
-        # 预处理
+        # Preprocess
         golden_processed = self._preprocess(golden)
         generated_processed = self._preprocess(generated)
         
-        # 如果启用选项提取，尝试从生成的答案中提取选项
+        # If choice extraction enabled, try to extract choice from generated answer
         if self.extract_choice:
             extracted_choice = self._extract_choice(generated_processed)
             if extracted_choice:
                 generated_processed = extracted_choice
         
-        # 比较
+        # Compare
         if self.case_sensitive:
             return golden_processed == generated_processed
         else:
@@ -120,18 +118,18 @@ class ExactMatch(BaseEvaluator):
     
     def _preprocess(self, text: str) -> str:
         """
-        预处理文本
+        Preprocess text.
         
         Args:
-            text: 原始文本
+            text: Raw text
             
         Returns:
-            处理后的文本
+            Processed text
         """
         if not text:
             return ""
         
-        # 规范化空白字符
+        # Normalize whitespace
         if self.normalize_whitespace:
             text = re.sub(r'\s+', ' ', text).strip()
         
@@ -139,35 +137,35 @@ class ExactMatch(BaseEvaluator):
     
     def _extract_choice(self, text: str) -> str:
         """
-        从文本中提取选项（支持多种格式：(a), a), a., A等）
+        Extract choice from text (supports formats: (a), a), a., A, etc.).
         
         Returns:
-            标准化的选项格式"(a)"，未找到则返回空字符串
+            Normalized choice format "(a)", empty string if not found
         """
-        # 尝试匹配 (a), (b), (c), (d) 等格式
+        # Try matching (a), (b), (c), (d) format
         match = re.search(r'\(([a-zA-Z])\)', text)
         if match:
             return f"({match.group(1).lower()})"
         
-        # 尝试匹配 a), b), c), d) 等格式
+        # Try matching a), b), c), d) format
         match = re.search(r'\b([a-zA-Z])\)', text)
         if match:
             return f"({match.group(1).lower()})"
         
-        # 尝试匹配 a., b., c., d. 等格式
+        # Try matching a., b., c., d. format
         match = re.search(r'\b([a-zA-Z])\.', text)
         if match:
             return f"({match.group(1).lower()})"
         
-        # 尝试匹配单独的字母（在句首或被空白包围）
+        # Try matching standalone letter (at start or surrounded by whitespace)
         match = re.search(r'(?:^|\s)([a-zA-Z])(?:\s|$)', text)
         if match:
             letter = match.group(1).lower()
-            # 只接受 a-z 的前几个字母（通常选项不超过 f）
+            # Only accept first few letters (options typically don't exceed f)
             if letter in 'abcdefgh':
                 return f"({letter})"
         
-        # 如果都没匹配到，返回空字符串
+        # Return empty string if no match
         return ""
 
 

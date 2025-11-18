@@ -1,7 +1,5 @@
 """
-Stages 模块
-
-包含评测流程各个阶段的实现。
+Stages module - contains implementation for each evaluation stage.
 """
 
 

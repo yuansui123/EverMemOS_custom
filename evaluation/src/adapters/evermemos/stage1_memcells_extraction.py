@@ -37,7 +37,7 @@ from memory_layer.memory_extractor.episode_memory_extractor import (
 from memory_layer.memory_extractor.event_log_extractor import EventLogExtractor
 from memory_layer.types import RawDataType
 
-# 新增：聚类和 Profile 管理组件
+# Clustering and Profile management components
 from memory_layer.cluster_manager import (
     ClusterManager,
     ClusterManagerConfig,
@@ -155,10 +155,10 @@ async def memcell_extraction_from_conversation(
     llm_provider: LLMProvider = None,
     memcell_extractor: ConvMemCellExtractor = None,
     smart_mask: bool = True,
-    conv_id: str = None,  # 添加会话ID用于进度条描述
-    progress: Progress = None,  # 添加进度条对象
-    task_id: int = None,  # 添加任务ID
-    use_semantic_extraction: bool = False,  # 新增：是否启用语义记忆提取
+    conv_id: str = None,  # Add conversation ID for progress bar description
+    progress: Progress = None,  # Add progress bar object
+    task_id: int = None,  # Add task ID
+    use_semantic_extraction: bool = False,  # Enable semantic memory extraction
 ) -> list:
 
     episode_extractor = EpisodeMemoryExtractor(llm_provider=llm_provider, use_eval_prompts=True)
@@ -171,12 +171,12 @@ async def memcell_extraction_from_conversation(
     history_raw_data_list = []
     # raw_data_list = raw_data_list[:100]
 
-    # 处理消息
+    # Process messages
     total_messages = len(raw_data_list)
     smart_mask_flag = False
 
     for idx, raw_data in enumerate(raw_data_list):
-        # 更新进度条（在处理前更新，显示正在处理第几条）
+        # Update progress bar (before processing, showing which message is being processed)
         if progress and task_id is not None:
             progress.update(task_id, completed=idx)
 
@@ -201,7 +201,7 @@ async def memcell_extraction_from_conversation(
             try:
                 result = await memcell_extractor.extract_memcell(
                     request,
-                    use_semantic_extraction=use_semantic_extraction  # 传递开关
+                    use_semantic_extraction=use_semantic_extraction  # Pass flag
                 )
                 break
             except Exception as e:
@@ -210,7 +210,7 @@ async def memcell_extraction_from_conversation(
                     raise Exception("Memcell extraction failed")
                 continue
         memcell_result = result[0]
-        # print(f"   ✅ Memcell result: {memcell_result}")  # 注释掉避免干扰进度条
+        # print(f"   ✅ Memcell result: {memcell_result}")  # Commented to avoid interrupting progress bar
         if memcell_result is None:
             history_raw_data_list.append(raw_data)
         elif isinstance(memcell_result, MemCell):
@@ -226,7 +226,7 @@ async def memcell_extraction_from_conversation(
             console.print(f"   ❌ Memcell result: {memcell_result}", style="bold red")
             raise Exception("Memcell extraction failed")
 
-    # 处理完成，更新进度为100%
+    # Processing complete, update progress to 100%
     if progress and task_id is not None:
         progress.update(task_id, completed=total_messages)
 
@@ -273,37 +273,37 @@ async def process_single_conversation(
     progress_counter: dict = None,
     progress: Progress = None,
     task_id: int = None,
-    config: ExperimentConfig = None,  # 新增：传入配置
+    config: ExperimentConfig = None,  # Pass configuration
 ) -> tuple:
-    """处理单个会话并返回结果（新增：聚类和 Profile 提取）
+    """Process single conversation and return results (with clustering and Profile extraction).
 
     Args:
-        conv_id: 会话ID
-        conversation: 会话数据
-        save_dir: 保存目录
-        llm_provider: 共享的LLM提供者实例
-        event_log_extractor: 事件日志提取器实例
-        progress: 进度条对象
-        task_id: 进度任务ID
-        config: 实验配置（用于读取开关）
+        conv_id: Conversation ID
+        conversation: Conversation data
+        save_dir: Save directory
+        llm_provider: Shared LLM provider instance
+        event_log_extractor: Event log extractor instance
+        progress: Progress bar object
+        task_id: Progress task ID
+        config: Experiment configuration (for reading feature flags)
 
     Returns:
         tuple: (conv_id, memcell_list)
     """
     try:
-        # 更新状态为处理中
+        # Update status to processing
         if progress and task_id is not None:
-            progress.update(task_id, status="处理中")
+            progress.update(task_id, status="Processing")
 
-        # ===== 根据配置创建组件 =====
+        # Create components based on configuration
         cluster_mgr = None
         profile_mgr = None
         
-        # 创建 MemCellExtractor
+        # Create MemCellExtractor
         raw_data_list = convert_conversation_to_raw_data_list(conversation)
         memcell_extractor = ConvMemCellExtractor(llm_provider=llm_provider, use_eval_prompts=True)
         
-        # 条件创建：聚类管理器（每个对话独立）
+        # Conditional creation: Cluster manager (per-conversation)
         if config and config.enable_clustering:
             cluster_storage = InMemoryClusterStorage(
                 enable_persistence=True,
@@ -319,7 +319,7 @@ async def process_single_conversation(
             cluster_mgr = ClusterManager(config=cluster_config, storage=cluster_storage)
             cluster_mgr.attach_to_extractor(memcell_extractor)
         
-        # 条件创建：Profile 管理器
+        # Conditional creation: Profile manager
         if config and config.enable_profile_extraction and cluster_mgr:
             profile_storage = InMemoryProfileStorage(
                 enable_persistence=True,
@@ -327,7 +327,7 @@ async def process_single_conversation(
                 enable_versioning=True
             )
             
-            # 动态设置场景类型
+            # Set scenario type dynamically
             scenario = ScenarioType.ASSISTANT if config.profile_scenario.lower() == "assistant" else ScenarioType.GROUP_CHAT
             
             profile_config = ProfileManagerConfig(
@@ -346,13 +346,13 @@ async def process_single_conversation(
                 group_name=f"LoComo Conversation {conv_id}"
             )
             
-            # 设置最小 MemCells 阈值
+            # Set minimum MemCells threshold
             profile_mgr._min_memcells_threshold = config.profile_min_memcells
             
-            # 连接组件
+            # Connect components
             profile_mgr.attach_to_cluster_manager(cluster_mgr)
         
-        # 提取 MemCells（根据配置决定是否启用语义记忆）
+        # Extract MemCells (enable semantic memory based on config)
         use_semantic = config.enable_semantic_extraction if config else False
         memcell_list = await memcell_extraction_from_conversation(
             raw_data_list,
@@ -361,34 +361,34 @@ async def process_single_conversation(
             conv_id=conv_id,
             progress=progress,
             task_id=task_id,
-            use_semantic_extraction=use_semantic,  # 传递语义记忆开关
+            use_semantic_extraction=use_semantic,  # Pass semantic memory flag
         )
-        # print(f"   ✅ 会话 {conv_id}: {len(memcell_list)} memcells extracted")  # 注释掉避免干扰进度条
+        # print(f"   ✅ Conv {conv_id}: {len(memcell_list)} memcells extracted")  # Commented to avoid interrupting progress bar
 
-        # 在保存前转换时间戳为 datetime 对象
+        # Convert timestamps to datetime objects before saving
         for memcell in memcell_list:
             if hasattr(memcell, 'timestamp'):
                 ts = memcell.timestamp
                 if isinstance(ts, (int, float)):
-                    # 将 int/float 时间戳转换为带时区的 datetime
+                    # Convert int/float timestamp to datetime with timezone
                     memcell.timestamp = from_timestamp(ts)
                 elif isinstance(ts, str):
-                    # 将字符串时间戳转换为带时区的 datetime
+                    # Convert string timestamp to datetime with timezone
                     memcell.timestamp = from_iso_format(ts)
                 elif not isinstance(ts, datetime):
-                    # 如果不是预期的类型，使用当前时间
+                    # If unexpected type, use current time
                     memcell.timestamp = get_now_with_timezone()
 
-        # 🔥 优化：并发生成 event log（提升速度 10-20 倍）
+        # Optimization: concurrent event log generation (10-20x faster)
         if event_log_extractor:
-            # 准备所有需要提取 event log 的 memcells
+            # Prepare all memcells needing event log extraction
             memcells_with_episode = [
                 (idx, memcell) 
                 for idx, memcell in enumerate(memcell_list)
                 if hasattr(memcell, 'episode') and memcell.episode
             ]
             
-            # 定义单个 event log 提取任务
+            # Define single event log extraction task
             async def extract_single_event_log(idx: int, memcell):
                 try:
                     event_log = await event_log_extractor.extract_event_log(
@@ -399,69 +399,69 @@ async def process_single_conversation(
                 except Exception as e:
                     console = Console()
                     console.print(
-                        f"\n⚠️  生成event log失败 (Conv {conv_id}, Memcell {idx}): {e}",
+                        f"\n⚠️  Event log generation failed (Conv {conv_id}, Memcell {idx}): {e}",
                         style="yellow",
                     )
                     return idx, None
             
-            # 🔥 并发提取所有 event logs（使用 Semaphore 控制并发数）
-            sem = asyncio.Semaphore(20)  # 限制并发数为 20（避免 API 限流）
+            # Concurrent extraction of all event logs (using Semaphore to control concurrency)
+            sem = asyncio.Semaphore(20)  # Limit concurrency to 20 (avoid API rate limits)
             
             async def extract_with_semaphore(idx, memcell):
                 async with sem:
                     return await extract_single_event_log(idx, memcell)
             
-            print(f"\n🔥 开始并发提取 {len(memcells_with_episode)} 个 event logs...")
+            print(f"\n🔥 Starting concurrent extraction of {len(memcells_with_episode)} event logs...")
             event_log_tasks = [
                 extract_with_semaphore(idx, memcell) 
                 for idx, memcell in memcells_with_episode
             ]
             event_log_results = await asyncio.gather(*event_log_tasks)
             
-            # 将 event logs 关联回对应的 memcells
+            # Link event logs back to corresponding memcells
             for original_idx, event_log in event_log_results:
                 if event_log:
                     memcell_list[original_idx].event_log = event_log
             
-            print(f"✅ Event log 提取完成: {sum(1 for _, el in event_log_results if el)}/{len(event_log_results)} 成功")
+            print(f"✅ Event log extraction complete: {sum(1 for _, el in event_log_results if el)}/{len(event_log_results)} succeeded")
 
-        # 保存单个会话的结果
+        # Save single conversation results
         memcell_dicts = []
         for memcell in memcell_list:
             memcell_dict = memcell.to_dict()
-            # 如果有event_log，添加到字典中
+            # If has event_log, add to dict
             if hasattr(memcell, 'event_log') and memcell.event_log:
                 memcell_dict['event_log'] = memcell.event_log.to_dict()
             memcell_dicts.append(memcell_dict)
 
         memcell_dicts = [memcell_dict for memcell_dict in memcell_dicts]
-        # print(memcell_dicts)  # 注释掉大量输出
+        # print(memcell_dicts)  # Commented to avoid large output
         output_file = os.path.join(save_dir, f"memcell_list_conv_{conv_id}.json")
         with open(output_file, "w") as f:
             json.dump(memcell_dicts, f, ensure_ascii=False, indent=2)
 
-        # ===== 条件导出：聚类和 Profile 结果 =====
+        # Conditional export: clustering and Profile results
         cluster_stats = {}
         profile_stats = {}
         profile_count = 0
         
         if cluster_mgr or profile_mgr:
-            await asyncio.sleep(2)  # 给异步任务时间完成
+            await asyncio.sleep(2)  # Give async tasks time to complete
         
-        # 导出聚类结果（如果启用）
+        # Export clustering results (if enabled)
         if cluster_mgr:
             cluster_output_dir = Path(save_dir) / "clusters" / f"conv_{conv_id}"
             cluster_output_dir.mkdir(parents=True, exist_ok=True)
             await cluster_mgr.export_clusters(cluster_output_dir)
             cluster_stats = cluster_mgr.get_stats()
         
-        # 导出 Profiles（如果启用）
+        # Export Profiles (if enabled)
         if profile_mgr:
             profile_output_dir = Path(save_dir) / "profiles" / f"conv_{conv_id}"
             profile_count = await profile_mgr.export_profiles(profile_output_dir, include_history=True)
             profile_stats = profile_mgr.get_stats()
         
-        # 保存统计信息
+        # Save statistics
         stats_output = {
             "conv_id": conv_id,
             "memcells": len(memcell_list),
@@ -481,17 +481,17 @@ async def process_single_conversation(
         with open(stats_file, "w") as f:
             json.dump(stats_output, f, ensure_ascii=False, indent=2)
 
-        # 更新进度（静默，避免干扰进度条）
+        # Update progress (silent, avoid interrupting progress bar)
         if progress_counter:
             progress_counter['completed'] += 1
-            # 不打印，避免干扰进度条
+            # No printing to avoid interrupting progress bar
 
         return conv_id, memcell_list
 
     except Exception as e:
-        # 显示错误信息，这样我们能知道具体问题
+        # Show error message so we know the specific issue
         console = Console()
-        console.print(f"\n❌ 处理会话 {conv_id} 时出错: {e}", style="bold red")
+        console.print(f"\n❌ Error processing conversation {conv_id}: {e}", style="bold red")
         if progress_counter:
             progress_counter['completed'] += 1
             progress_counter['failed'] += 1
@@ -502,7 +502,7 @@ async def process_single_conversation(
 
 
 async def main():
-    """主函数 - 并发处理所有会话"""
+    """Main function - concurrent processing of all conversations."""
 
     config = ExperimentConfig()
     llm_service = config.llm_service
@@ -510,7 +510,6 @@ async def main():
     raw_data_dict = raw_data_load(dataset_path)
 
     CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
-    # 🔥 修正：实际文件在 locomo_evaluation/ 目录下，而不是 results/ 目录
     os.makedirs(os.path.join(CURRENT_DIR, config.experiment_name), exist_ok=True)
     os.makedirs(
         os.path.join(CURRENT_DIR, config.experiment_name, "memcells"),
@@ -520,69 +519,69 @@ async def main():
 
     console = Console()
     
-    # 打印配置信息
+    # Print configuration info
     console.print("\n" + "=" * 60, style="bold cyan")
-    console.print("实验配置", style="bold cyan")
+    console.print("Experiment Configuration", style="bold cyan")
     console.print("=" * 60, style="bold cyan")
-    console.print(f"实验名称: {config.experiment_name}", style="cyan")
-    console.print(f"数据路径: {config.datase_path}", style="cyan")
-    console.print(f"\n功能开关:", style="bold yellow")
-    console.print(f"  - 语义记忆提取: {'✅ 启用' if config.enable_semantic_extraction else '❌ 禁用'}", 
+    console.print(f"Experiment name: {config.experiment_name}", style="cyan")
+    console.print(f"Dataset path: {config.datase_path}", style="cyan")
+    console.print(f"\nFeature flags:", style="bold yellow")
+    console.print(f"  - Semantic extraction: {'✅ Enabled' if config.enable_semantic_extraction else '❌ Disabled'}", 
                   style="green" if config.enable_semantic_extraction else "dim")
-    console.print(f"  - 聚类: {'✅ 启用' if config.enable_clustering else '❌ 禁用'}", 
+    console.print(f"  - Clustering: {'✅ Enabled' if config.enable_clustering else '❌ Disabled'}", 
                   style="green" if config.enable_clustering else "dim")
-    console.print(f"  - Profile 提取: {'✅ 启用' if config.enable_profile_extraction else '❌ 禁用'}", 
+    console.print(f"  - Profile extraction: {'✅ Enabled' if config.enable_profile_extraction else '❌ Disabled'}", 
                   style="green" if config.enable_profile_extraction else "dim")
     
     if config.enable_clustering:
-        console.print(f"\n聚类配置:", style="bold")
-        console.print(f"  - 相似度阈值: {config.cluster_similarity_threshold}", style="dim")
-        console.print(f"  - 最大时间间隔: {config.cluster_max_time_gap_days} 天", style="dim")
+        console.print(f"\nClustering config:", style="bold")
+        console.print(f"  - Similarity threshold: {config.cluster_similarity_threshold}", style="dim")
+        console.print(f"  - Max time gap: {config.cluster_max_time_gap_days} days", style="dim")
     
     if config.enable_profile_extraction:
-        console.print(f"\nProfile 配置:", style="bold")
-        console.print(f"  - 场景: {config.profile_scenario}", style="dim")
-        console.print(f"  - 最小置信度: {config.profile_min_confidence}", style="dim")
-        console.print(f"  - 最小 MemCells: {config.profile_min_memcells}", style="dim")
+        console.print(f"\nProfile config:", style="bold")
+        console.print(f"  - Scenario: {config.profile_scenario}", style="dim")
+        console.print(f"  - Min confidence: {config.profile_min_confidence}", style="dim")
+        console.print(f"  - Min MemCells: {config.profile_min_memcells}", style="dim")
     console.print("=" * 60 + "\n", style="bold cyan")
     
-    # 🔥 断点续传：检查已完成的对话
+    # Checkpoint resume: check completed conversations
     completed_convs = set()
     for conv_id in raw_data_dict.keys():
         output_file = os.path.join(save_dir, f"memcell_list_conv_{conv_id}.json")
         if os.path.exists(output_file):
-            # 验证文件有效性（非空且可解析）
+            # Validate file (non-empty and parseable)
             try:
                 with open(output_file, "r") as f:
                     data = json.load(f)
-                    if data and len(data) > 0:  # 确保有数据
+                    if data and len(data) > 0:  # Ensure data available
                         completed_convs.add(conv_id)
-                        console.print(f"✅ 跳过已完成的会话: {conv_id} ({len(data)} memcells)", style="green")
+                        console.print(f"✅ Skipping completed conversation: {conv_id} ({len(data)} memcells)", style="green")
             except Exception as e:
-                console.print(f"⚠️  会话 {conv_id} 文件损坏，将重新处理: {e}", style="yellow")
+                console.print(f"⚠️  Conversation {conv_id} file corrupted, will reprocess: {e}", style="yellow")
     
-    # 过滤出需要处理的对话
+    # Filter conversations needing processing
     pending_raw_data_dict = {
         conv_id: conv_data 
         for conv_id, conv_data in raw_data_dict.items() 
         if conv_id not in completed_convs
     }
     
-    console.print(f"\n📊 总共发现 {len(raw_data_dict)} 个会话", style="bold cyan")
-    console.print(f"✅ 已完成: {len(completed_convs)} 个", style="bold green")
-    console.print(f"⏳ 待处理: {len(pending_raw_data_dict)} 个", style="bold yellow")
+    console.print(f"\n📊 Total conversations found: {len(raw_data_dict)}", style="bold cyan")
+    console.print(f"✅ Completed: {len(completed_convs)}", style="bold green")
+    console.print(f"⏳ Pending: {len(pending_raw_data_dict)}", style="bold yellow")
     
     if len(pending_raw_data_dict) == 0:
-        console.print(f"\n🎉 所有会话已完成，无需处理！", style="bold green")
+        console.print(f"\n🎉 All conversations completed, nothing to process!", style="bold green")
         return
     
     total_messages = sum(len(conv) for conv in pending_raw_data_dict.values())
-    console.print(f"📝 待处理消息数: {total_messages}", style="bold blue")
-    console.print(f"🚀 开始并发处理剩余会话...\n", style="bold green")
+    console.print(f"📝 Pending messages: {total_messages}", style="bold blue")
+    console.print(f"🚀 Starting concurrent processing of remaining conversations...\n", style="bold green")
 
-    # 创建共享的 LLM Provider 和 MemCell Extractor 实例（解决连接竞争问题）
-    console.print("⚙️ 初始化 LLM Provider...", style="yellow")
-    console.print(f"   模型: {config.llm_config[llm_service]['model']}", style="dim")
+    # Create shared LLM Provider and MemCell Extractor instances (solve connection race issue)
+    console.print("⚙️ Initializing LLM Provider...", style="yellow")
+    console.print(f"   Model: {config.llm_config[llm_service]['model']}", style="dim")
     console.print(
         f"   Base URL: {config.llm_config[llm_service]['base_url']}", style="dim"
     )
@@ -596,66 +595,66 @@ async def main():
         max_tokens=config.llm_config[llm_service]["max_tokens"],
     )
 
-    # 创建共享的 Event Log Extractor
-    console.print("⚙️ 初始化 Event Log Extractor...", style="yellow")
+    # Create shared Event Log Extractor
+    console.print("⚙️ Initializing Event Log Extractor...", style="yellow")
     shared_event_log_extractor = EventLogExtractor(llm_provider=shared_llm_provider)
 
-    # 🔥 使用待处理的对话字典（断点续传）
-    # 创建进度计数器
+    # 🔥 Use pending conversation dict (checkpoint resume)
+    # Create progress counter
     progress_counter = {'total': len(pending_raw_data_dict), 'completed': 0, 'failed': 0}
 
-    # 使用 Rich 进度条
+    # Use Rich progress bar
     start_time = time.time()
 
     with Progress(
         SpinnerColumn(),
         TextColumn("[progress.description]{task.description}"),
         BarColumn(),
-        MofNCompleteColumn(),  # 显示 "3/10" 格式
+        MofNCompleteColumn(),  # Show "3/10" format
         TextColumn("•"),
-        TaskProgressColumn(),  # 显示百分比
+        TaskProgressColumn(),  # Show percentage
         TextColumn("•"),
-        TimeElapsedColumn(),  # 已用时间
+        TimeElapsedColumn(),  # Elapsed time
         TextColumn("•"),
-        TimeRemainingColumn(),  # 预计剩余时间
+        TimeRemainingColumn(),  # Remaining time
         TextColumn("•"),
         TextColumn("[bold blue]{task.fields[status]}"),
         console=console,
         transient=False,
         refresh_per_second=1,
     ) as progress:
-        # 创建主进度任务
+        # Create main progress task
         main_task = progress.add_task(
-            "[bold cyan]🎯 总进度",
+            "[bold cyan]🎯 Overall Progress",
             total=len(raw_data_dict),
-            completed=len(completed_convs),  # 🔥 已完成的数量
-            status="处理中",
+            completed=len(completed_convs),  # Completed count
+            status="Processing",
         )
 
-        # 🔥 先添加已完成的会话到进度条（显示为已完成）
+        # First add completed conversations to progress bar (show as completed)
         conversation_tasks = {}
         for conv_id in completed_convs:
             conv_task_id = progress.add_task(
                 f"[green]Conv-{conv_id}",
                 total=len(raw_data_dict[conv_id]),
                 completed=len(raw_data_dict[conv_id]),  # 100%
-                status="✅ (已跳过)",
+                status="✅ (Skipped)",
             )
             conversation_tasks[conv_id] = conv_task_id
 
-        # 🔥 为待处理的会话创建进度条任务
+        # Create progress bar tasks for pending conversations
         updated_tasks = []
         for conv_id, conversation in pending_raw_data_dict.items():
-            # 创建每个会话的进度条
+            # Create progress bar for each conversation
             conv_task_id = progress.add_task(
-                f"[yellow]Conv-{conv_id}",  # 简化名称
-                total=len(conversation),  # 消息总数
-                completed=0,  # 初始化为0
-                status="等待",
+                f"[yellow]Conv-{conv_id}",  # Simplified name
+                total=len(conversation),  # Total messages
+                completed=0,  # Initialize to 0
+                status="Waiting",
             )
             conversation_tasks[conv_id] = conv_task_id
 
-            # 创建处理任务
+            # Create processing task
             task = process_single_conversation(
                 conv_id,
                 conversation,
@@ -665,11 +664,11 @@ async def main():
                 progress_counter=progress_counter,
                 progress=progress,
                 task_id=conv_task_id,
-                config=config,  # 传入配置
+                config=config,  # Pass configuration
             )
             updated_tasks.append(task)
 
-        # 定义完成时更新函数
+        # Define completion update function
         async def run_with_completion(task, conv_id):
             result = await task
             progress.update(
@@ -680,7 +679,7 @@ async def main():
             progress.update(main_task, advance=1)
             return result
 
-        # 🔥 并发执行所有待处理的任务
+        # Execute all pending tasks concurrently
         if updated_tasks:
             results = await asyncio.gather(
                 *[
@@ -692,12 +691,12 @@ async def main():
             results = []
         # with open(os.path.join(save_dir, "response_info.json"), "w") as f:
         #     json.dump(shared_llm_provider.provider.response_info, f, ensure_ascii=False, indent=2)
-        # 更新主进度为完成
-        progress.update(main_task, status="✅ 完成")
+        # Update main progress to complete
+        progress.update(main_task, status="✅ Complete")
 
     end_time = time.time()
 
-    # 统计结果
+    # Gather statistics
     all_memcells = []
     successful_convs = 0
     for conv_id, memcell_list in results:
@@ -706,27 +705,27 @@ async def main():
             all_memcells.extend(memcell_list)
 
     console.print("\n" + "=" * 60, style="dim")
-    console.print("📊 处理完成统计:", style="bold")
+    console.print("📊 Processing completion statistics:", style="bold")
     console.print(
-        f"   ✅ 成功处理会话数: {successful_convs}/{len(raw_data_dict)}", style="green"
+        f"   ✅ Successfully processed: {successful_convs}/{len(raw_data_dict)}", style="green"
     )
-    console.print(f"   📝 总共提取的 memcells: {len(all_memcells)}", style="blue")
-    console.print(f"   ⏱️  总耗时: {end_time - start_time:.2f} 秒", style="yellow")
+    console.print(f"   📝 Total memcells extracted: {len(all_memcells)}", style="blue")
+    console.print(f"   ⏱️  Total time: {end_time - start_time:.2f}s", style="yellow")
     console.print(
-        f"   🚀 平均每会话耗时: {(end_time - start_time)/len(raw_data_dict):.2f} 秒",
+        f"   🚀 Average per conversation: {(end_time - start_time)/len(raw_data_dict):.2f}s",
         style="cyan",
     )
     console.print("=" * 60, style="dim")
 
-    # 保存汇总结果
+    # Save summary results
     all_memcells_dicts = [memcell.to_dict() for memcell in all_memcells]
     summary_file = os.path.join(save_dir, "memcell_list_all.json")
     with open(summary_file, "w") as f:
         json.dump(all_memcells_dicts, f, ensure_ascii=False, indent=2)
-    console.print(f"\n💾 汇总结果已保存到: {summary_file}", style="green")
+    console.print(f"\n💾 Summary results saved to: {summary_file}", style="green")
 
-    # ===== 新增：汇总聚类和 Profile 统计 =====
-    # 统计所有会话的聚类和 Profile 信息
+    # Aggregate clustering and Profile statistics
+    # Collect clustering and Profile info from all conversations
     total_clusters = 0
     total_profiles = 0
     cluster_stats_list = []
@@ -745,7 +744,7 @@ async def main():
             except Exception:
                 pass
     
-    # 保存处理摘要（新增聚类和 Profile 统计）
+    # Save processing summary (with clustering and Profile statistics)
     summary = {
         "total_conversations": len(raw_data_dict),
         "successful_conversations": successful_convs,
@@ -769,15 +768,15 @@ async def main():
     summary_info_file = os.path.join(save_dir, "processing_summary.json")
     with open(summary_info_file, "w") as f:
         json.dump(summary, f, ensure_ascii=False, indent=2)
-    console.print(f"📊 处理摘要已保存到: {summary_info_file}", style="green")
+    console.print(f"📊 Processing summary saved to: {summary_info_file}", style="green")
     
-    # 打印聚类和 Profile 统计
-    console.print(f"\n📊 聚类统计:", style="bold cyan")
-    console.print(f"   - 总聚类数: {total_clusters}", style="cyan")
-    console.print(f"   - 平均每会话: {total_clusters / successful_convs if successful_convs > 0 else 0:.1f}", style="cyan")
-    console.print(f"\n👤 Profile 统计:", style="bold green")
-    console.print(f"   - 总 Profiles: {total_profiles}", style="green")
-    console.print(f"   - 平均每会话: {total_profiles / successful_convs if successful_convs > 0 else 0:.1f}\n", style="green")
+    # Print clustering and Profile statistics
+    console.print(f"\n📊 Clustering statistics:", style="bold cyan")
+    console.print(f"   - Total clusters: {total_clusters}", style="cyan")
+    console.print(f"   - Average per conversation: {total_clusters / successful_convs if successful_convs > 0 else 0:.1f}", style="cyan")
+    console.print(f"\n👤 Profile statistics:", style="bold green")
+    console.print(f"   - Total Profiles: {total_profiles}", style="green")
+    console.print(f"   - Average per conversation: {total_profiles / successful_convs if successful_convs > 0 else 0:.1f}\n", style="green")
 
 
 if __name__ == "__main__":

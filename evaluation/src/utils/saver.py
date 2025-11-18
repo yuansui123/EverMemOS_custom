@@ -1,7 +1,5 @@
 """
-结果保存工具
-
-提供统一的结果保存功能，支持 JSON、pickle 等格式。
+Result saver utilities - unified result saving with JSON, pickle support.
 """
 import json
 import pickle
@@ -10,25 +8,25 @@ from typing import Any, Dict
 
 
 class ResultSaver:
-    """结果保存器"""
+    """Result saver."""
     
     def __init__(self, output_dir: Path):
         """
-        初始化保存器
+        Initialize saver.
         
         Args:
-            output_dir: 输出目录
+            output_dir: Output directory
         """
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
     
     def save_json(self, data: Any, filename: str):
         """
-        保存 JSON 文件
+        Save JSON file.
         
         Args:
-            data: 要保存的数据
-            filename: 文件名
+            data: Data to save
+            filename: Filename
         """
         filepath = self.output_dir / filename
         with open(filepath, 'w', encoding='utf-8') as f:
@@ -36,13 +34,13 @@ class ResultSaver:
     
     def load_json(self, filename: str) -> Any:
         """
-        加载 JSON 文件
+        Load JSON file.
         
         Args:
-            filename: 文件名
+            filename: Filename
             
         Returns:
-            加载的数据
+            Loaded data
         """
         filepath = self.output_dir / filename
         if not filepath.exists():
@@ -53,11 +51,11 @@ class ResultSaver:
     
     def save_pickle(self, data: Any, filename: str):
         """
-        保存 pickle 文件
+        Save pickle file.
         
         Args:
-            data: 要保存的数据
-            filename: 文件名
+            data: Data to save
+            filename: Filename
         """
         filepath = self.output_dir / filename
         with open(filepath, 'wb') as f:
@@ -65,13 +63,13 @@ class ResultSaver:
     
     def load_pickle(self, filename: str) -> Any:
         """
-        加载 pickle 文件
+        Load pickle file.
         
         Args:
-            filename: 文件名
+            filename: Filename
             
         Returns:
-            加载的数据
+            Loaded data
         """
         filepath = self.output_dir / filename
         if not filepath.exists():
@@ -81,6 +79,6 @@ class ResultSaver:
             return pickle.load(f)
     
     def file_exists(self, filename: str) -> bool:
-        """检查文件是否存在"""
+        """Check if file exists."""
         return (self.output_dir / filename).exists()
 

@@ -1,7 +1,5 @@
 """
-Add 阶段
-
-负责摄入对话数据并构建索引。
+Add stage - ingest conversation data and build index.
 """
 from pathlib import Path
 from typing import List, Any, Optional
@@ -22,31 +20,31 @@ async def run_add_stage(
     completed_stages: set,
 ) -> dict:
     """
-    执行 Add 阶段
+    Execute Add stage.
     
     Args:
-        adapter: 系统适配器
-        dataset: 标准格式数据集
-        output_dir: 输出目录
-        checkpoint_manager: 断点续传管理器
-        logger: 日志器
-        console: 控制台对象
-        completed_stages: 已完成的阶段集合
+        adapter: System adapter
+        dataset: Standard format dataset
+        output_dir: Output directory
+        checkpoint_manager: Checkpoint manager for resume
+        logger: Logger
+        console: Console object
+        completed_stages: Set of completed stages
         
     Returns:
-        包含 index 的字典
+        Dict containing index
     """
-    # 传递 checkpoint_manager 以支持细粒度断点续传
+    # Pass checkpoint_manager for fine-grained resume support
     index = await adapter.add(
         conversations=dataset.conversations,
         output_dir=output_dir,
         checkpoint_manager=checkpoint_manager
     )
     
-    # 索引元数据（延迟加载，无需持久化）
+    # Index metadata (lazy load, no need to persist)
     logger.info("✅ Stage 1 completed")
     
-    # 保存 checkpoint
+    # Save checkpoint
     completed_stages.add("add")
     if checkpoint_manager:
         checkpoint_manager.save_checkpoint(completed_stages)

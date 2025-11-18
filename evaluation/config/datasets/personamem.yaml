@@ -16,17 +16,17 @@ data:
 
 # Evaluation configuration
 evaluation:
-  type: "exact_match"  # PersonaMem 是选择题，使用精确匹配
+  type: "exact_match"  # PersonaMem is a multiple-choice question, use exact match
   
-  # Exact match 配置
-  case_sensitive: false  # 不区分大小写
-  normalize_whitespace: true  # 规范化空白字符
-  extract_choice: true  # 从生成的答案中提取选项（如 (a), (b)）
+  # Exact match settings
+  case_sensitive: false  # Case insensitive
+  normalize_whitespace: true  # Normalize whitespace
+  extract_choice: true  # Extract options from the generated answer (like (a), (b))
   
   # PersonaMem categories: 
   # "recall_user_shared_facts", "provide_preference_aligned_recommendations",
   # "suggest_new_ideas", "recalling_the_reasons_behind_previous_updates",
   # "track_full_preference_evolution", "generalizing_to_new_scenarios",
   # "recalling_facts_mentioned_by_the_user"
-  filter_category: []  # 如需过滤，添加到列表：["suggest_new_ideas", ...]
+  filter_category: []  # If you need to filter, add to the list: ["suggest_new_ideas", ...]
 

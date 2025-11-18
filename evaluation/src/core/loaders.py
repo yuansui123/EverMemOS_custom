@@ -1,8 +1,8 @@
 """
-数据加载器
+Data loaders.
 
-提供不同数据集的加载功能。
-支持自动转换非 Locomo 格式的数据集。
+Provides loading functionality for different datasets.
+Supports automatic conversion of non-Locomo format datasets.
 """
 import json
 from datetime import datetime, timedelta
@@ -13,71 +13,73 @@ from evaluation.src.core.data_models import Dataset, Conversation, Message, QAPa
 from evaluation.src.converters.registry import get_converter
 
 
-def load_dataset(dataset_name: str, data_path: str) -> Dataset:
+def load_dataset(dataset_name: str, data_path: str, max_content_length: Optional[int] = None) -> Dataset:
     """
-    智能加载数据集（支持自动转换）
+    Smart dataset loading with automatic conversion support.
     
     Args:
-        dataset_name: 数据集名称（如 "locomo", "longmemeval", "personamem"）
-        data_path: 数据文件路径或目录路径
+        dataset_name: Dataset name (e.g., "locomo", "longmemeval", "personamem")
+        data_path: Data file path or directory path
+        max_content_length: Optional max content length for truncating long messages
         
     Returns:
-        Dataset: 标准格式数据集
+        Dataset: Standard format dataset
     """
     data_path_obj = Path(data_path)
     
-    # 检查是否需要转换
+    # Check if conversion is needed
     converter = get_converter(dataset_name)
     
     if converter:
-        # 需要转换的数据集
+        # Dataset needs conversion
         if data_path_obj.is_file():
-            # 如果给的是文件路径，取其父目录
+            # If given a file path, use its parent directory
             data_dir = data_path_obj.parent
         else:
             data_dir = data_path_obj
         
-        # 检查是否需要转换
+        # Check if conversion is needed
         if converter.needs_conversion(data_dir):
             print(f"📝 Converted file not found, converting {dataset_name}...")
             
-            # 构建输入文件路径
+            # Build input file paths
             input_files = converter.get_input_files()
             input_paths = {
                 key: str(data_dir / filename)
                 for key, filename in input_files.items()
             }
             
-            # 执行转换
+            # Execute conversion
             output_path = str(converter.get_converted_path(data_dir))
             converter.convert(input_paths, output_path)
         
-        # 使用 converted 文件
+        # Use converted file
         locomo_file = converter.get_converted_path(data_dir)
     else:
-        # 原生 Locomo 格式，直接使用
+        # Native Locomo format, use directly
         if data_path_obj.is_file():
             locomo_file = data_path_obj
         else:
-            # 如果是目录，尝试找到 .json 文件
+            # If directory, try to find .json file
             json_files = list(data_path_obj.glob("*.json"))
             if not json_files:
                 raise FileNotFoundError(f"No JSON file found in {data_path_obj}")
             locomo_file = json_files[0]
     
-    return load_locomo_dataset(str(locomo_file), dataset_name=dataset_name)
+    return load_locomo_dataset(str(locomo_file), dataset_name=dataset_name, max_content_length=max_content_length)
 
 
-def load_locomo_dataset(data_path: str, dataset_name: str = "locomo") -> Dataset:
+def load_locomo_dataset(data_path: str, dataset_name: str = "locomo", max_content_length: Optional[int] = None) -> Dataset:
     """
-    加载 LoCoMo 格式的数据集
+    Load LoCoMo format dataset.
     
     Args:
-        data_path: Locomo 格式数据文件路径
-        dataset_name: 数据集名称（默认为 "locomo"，转换后的数据集应传入原始名称）
+        data_path: Locomo format data file path
+        dataset_name: Dataset name (default "locomo", converted datasets should pass original name)
+        max_content_length: Optional max content length for truncating long messages
         
     Returns:
-        Dataset: 标准格式数据集
+        Dataset: Standard format dataset
     """
     with open(data_path, "r", encoding="utf-8") as f:
         raw_data = json.load(f)
@@ -86,17 +88,17 @@ def load_locomo_dataset(data_path: str, dataset_name: str = "locomo") -> Dataset
     qa_pairs = []
     
     for idx, item in enumerate(raw_data):
-        # 添加数据集前缀，避免不同数据集间的 conversation_id 冲突
-        # 例如：locomo_0, longmemeval_0, personamem_0
+        # Add dataset prefix to avoid conversation_id conflicts between datasets
+        # Example: locomo_0, longmemeval_0, personamem_0
         conv_id = f"{dataset_name}_{idx}"
         conversation_data = item.get("conversation", {})
         qa_data = item.get("qa", [])
         
-        # 转换对话
-        conversation = _convert_locomo_conversation(conversation_data, conv_id)
+        # Convert conversation
+        conversation = _convert_locomo_conversation(conversation_data, conv_id, max_content_length=max_content_length)
         conversations.append(conversation)
         
-        # 转换 QA 对
+        # Convert QA pairs
         for qa_idx, qa_item in enumerate(qa_data):
             qa_pair = _convert_locomo_qa_pair(qa_item, conv_id, qa_idx)
             qa_pairs.append(qa_pair)
@@ -109,29 +111,39 @@ def load_locomo_dataset(data_path: str, dataset_name: str = "locomo") -> Dataset
     )
 
 
-def _convert_locomo_conversation(conversation_data: dict, conv_id: str) -> Conversation:
-    """转换 LoCoMo 对话"""
+def _convert_locomo_conversation(conversation_data: dict, conv_id: str, max_content_length: Optional[int] = None) -> Conversation:
+    """
+    Convert LoCoMo conversation.
+    
+    Args:
+        conversation_data: LoCoMo format conversation data
+        conv_id: Conversation ID
+        max_content_length: Optional max content length for truncating long messages
+    
+    Returns:
+        Conversation: Standard format conversation
+    """
     messages = []
     
-    # 获取所有 session keys，按照数字大小排序
+    # Get all session keys, sorted by numeric value
     session_keys = sorted(
         [key for key in conversation_data.keys()
          if key.startswith("session_") and not key.endswith("_date_time")],
-        key=lambda x: int(x.split("_")[1])  # 提取 session_X 中的数字 X 进行排序
+        key=lambda x: int(x.split("_")[1])  # Extract number X from session_X for sorting
     )
     
-    # 为没有时间戳的数据生成伪造的起始时间（用于 online API）
-    # 使用一个固定的基准时间：2024-01-01 00:00:00
+    # Generate fake start time for data without timestamps (for online APIs)
+    # Use fixed baseline: 2024-01-01 00:00:00
     fake_base_time = datetime(2024, 1, 1, 0, 0, 0)
     
-    # 第一步：解析所有 session 的时间戳
+    # Step 1: Parse timestamps for all sessions
     session_times = []
     for session_idx, session_key in enumerate(session_keys):
         session_time_key = f"{session_key}_date_time"
         if session_time_key in conversation_data:
             session_time = _parse_locomo_timestamp(conversation_data[session_time_key])
             
-            # 如果解析失败或为 "Unknown"，生成伪造时间戳
+            # If parse fails or is "Unknown", generate fake timestamp
             is_fake = (session_time is None)
             if is_fake:
                 session_time = fake_base_time + timedelta(hours=session_idx)
@@ -141,70 +153,74 @@ def _convert_locomo_conversation(conversation_data: dict, conv_id: str) -> Conve
                 "is_fake": is_fake
             })
         else:
-            # 没有 date_time 字段，生成伪造时间戳
+            # No date_time field, generate fake timestamp
             session_times.append({
                 "time": fake_base_time + timedelta(hours=session_idx),
                 "is_fake": True
             })
     
-    # 第二步：为每个 session 分配消息时间戳
+    # Step 2: Assign message timestamps for each session
     for session_idx, session_key in enumerate(session_keys):
         session_messages = conversation_data[session_key]
         
         if not session_messages:
             continue
         
-        # 获取当前 session 的起始时间
+        # Get current session start time
         current_session_time = session_times[session_idx]["time"]
         is_fake_timestamp = session_times[session_idx]["is_fake"]
         
-        # 计算消息时间间隔
-        # 策略：优先使用30秒间隔，只有在会超出下一个session时才缩小间隔
+        # Calculate message time intervals
+        # Strategy: prefer 30s intervals, only reduce if would exceed next session
         num_messages = len(session_messages)
-        default_interval = 30  # 默认30秒间隔
+        default_interval = 30  # Default 30s interval
         
         if num_messages > 1:
-            # 计算使用默认间隔需要的总时长
+            # Calculate total duration needed with default interval
             required_duration = (num_messages - 1) * default_interval
             
-            # 获取可用的时间跨度
+            # Get available time span
             if session_idx + 1 < len(session_times):
-                # 有下一个 session：计算到下一个 session 的时间
+                # Has next session: calculate time to next session
                 next_session_time = session_times[session_idx + 1]["time"]
                 available_duration = (next_session_time - current_session_time).total_seconds()
                 
-                # 如果时间跨度为负或太小（说明数据有问题），使用默认间隔
+                # If time span is negative or too small (data issue), use default interval
                 if available_duration <= 0:
                     time_interval = default_interval
-                # 留出10%缓冲，避免最后一条消息太接近下一个 session
+                # Leave 10% buffer to avoid last message too close to next session
                 elif required_duration > available_duration * 0.9:
-                    # 需要缩小间隔才能放下所有消息
+                    # Need to reduce interval to fit all messages
                     time_interval = (available_duration * 0.9) / (num_messages - 1)
                 else:
-                    # 可以使用默认间隔
+                    # Can use default interval
                     time_interval = default_interval
             else:
-                # 最后一个 session：直接使用默认间隔
+                # Last session: use default interval directly
                 time_interval = default_interval
         else:
-            # 只有一条消息，放在 session 开始时
+            # Only one message, place at session start
             time_interval = 0
         
-        # 转换每条消息
+        # Convert each message
         for msg_idx, msg in enumerate(session_messages):
             msg_timestamp = current_session_time + timedelta(seconds=msg_idx * time_interval)
             
-            # 处理图片信息
+            # Handle image information
             content = msg['text']
             if msg.get("img_url"):
                 blip_caption = msg.get("blip_caption", "an image")
                 speaker_name = msg['speaker']
                 content = f"[{speaker_name} shared an image: {blip_caption}] {content}"
             
+            # Apply content length limit (if specified)
+            if max_content_length and len(content) > max_content_length:
+                content = content[:max_content_length]
+            
             message = Message(
                 speaker_id=f"{msg['speaker'].lower().replace(' ', '_')}_{conv_id}",
                 speaker_name=msg['speaker'],
-                content=content,  # 使用处理后的 content
+                content=content,  # Use processed content
                 timestamp=msg_timestamp,
                 metadata={
                     "session": session_key,
@@ -212,7 +228,7 @@ def _convert_locomo_conversation(conversation_data: dict, conv_id: str) -> Conve
                     "img_url": msg.get("img_url"),
                     "blip_caption": msg.get("blip_caption"),
                     "query": msg.get("query"),
-                    "is_fake_timestamp": is_fake_timestamp,  # 标记是否为伪造时间戳
+                    "is_fake_timestamp": is_fake_timestamp,  # Mark if timestamp is fake
                 }
             )
             messages.append(message)
@@ -228,21 +244,21 @@ def _convert_locomo_conversation(conversation_data: dict, conv_id: str) -> Conve
 
 
 def _convert_locomo_qa_pair(qa_item: dict, conv_id: str, qa_idx: int) -> QAPair:
-    """转换 LoCoMo QA 对"""
-    # 提取额外的字段到 metadata
+    """Convert LoCoMo QA pair."""
+    # Extract additional fields to metadata
     metadata = {"conversation_id": conv_id}
     
-    # 如果有 all_options（PersonaMem 选择题），保存到 metadata
+    # If has all_options (PersonaMem multiple choice), save to metadata
     if "all_options" in qa_item:
         metadata["all_options"] = qa_item["all_options"]
     
-    # 优先使用数据中的 question_id（如果存在），否则生成一个唯一的 ID
+    # Prefer question_id from data if exists, otherwise generate unique ID
     question_id = qa_item.get("question_id")
     if not question_id:
-        # 使用 conv_id + qa_idx 生成唯一 ID，确保不会冲突
+        # Use conv_id + qa_idx to generate unique ID to avoid conflicts
         question_id = f"{conv_id}_qa{qa_idx}"
     
-    # 统一将 category 转换为字符串（兼容 int 和 str）
+    # Normalize category to string (compatible with int and str)
     category = qa_item.get("category")
     if category is not None:
         category = str(category)
@@ -259,24 +275,24 @@ def _convert_locomo_qa_pair(qa_item: dict, conv_id: str, qa_idx: int) -> QAPair:
 
 def _parse_locomo_timestamp(timestamp_str: str) -> Optional[datetime]:
     """
-    解析 LoCoMo 的时间格式
+    Parse LoCoMo timestamp format.
     
-    输入格式: "6:07 pm on 13 January, 2023"
-    特殊值: "Unknown" 或无法解析时返回 None
-    输出: datetime 对象或 None
+    Input format: "6:07 pm on 13 January, 2023"
+    Special value: "Unknown" or unparseable returns None
+    Output: datetime object or None
     """
-    # 清理字符串
+    # Clean string
     timestamp_str = timestamp_str.replace("\\s+", " ").strip()
     
-    # 处理特殊情况：Unknown 或空字符串
+    # Handle special cases: Unknown or empty string
     if timestamp_str.lower() == "unknown" or not timestamp_str:
-        # 没有时间信息，返回 None
+        # No time information, return None
         return None
     
     try:
         return datetime.strptime(timestamp_str, "%I:%M %p on %d %B, %Y")
     except ValueError:
-        # 如果解析失败，返回 None 并输出警告
+        # If parse fails, return None and print warning
         print(f"⚠️  Warning: Failed to parse timestamp '{timestamp_str}', no timestamp will be set")
         return None
 

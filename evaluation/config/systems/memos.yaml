@@ -9,18 +9,24 @@ adapter: "memos"
 # Memos API configuration
 api_url: "https://memos.memtensor.cn/api/openmem/v1"
 api_key: "${MEMOS_KEY}"
-batch_size: 10  # 每批次发送的消息数量（默认）
+batch_size: 10  # Number of messages to send per batch (default)
 max_retries: 5
 
+# Rate limiting (Memos has 10 requests/second limit)
+request_interval: 0.1  # Seconds to wait after each API call (10 req/s = 0.1s)
+
+# Concurrency configuration
+num_workers: 1  # Process conversations sequentially due to rate limit
+
 # Dataset-specific overrides
-# 针对特定数据集的配置覆盖
+# Configuration overrides for specific datasets
 dataset_overrides:
   longmemeval:
-    batch_size: 5  # LongMemEval 数据量大，使用更小的 batch_size
+    batch_size: 6  # LongMemEval has large data, use smaller batch_size
 
-# ⏰ Post-Add Wait: 等待后台索引构建完成
-# Online API 系统通常是异步处理，需要时间构建索引
-post_add_wait_seconds: 120  # 等待 120 秒后再开始 search
+# ⏰ Post-Add Wait: Wait for background index build to complete (if needed)
+# Online API systems are usually asynchronous, so it takes time to build the index
+post_add_wait_seconds: 180  # Wait 180 seconds before starting search
 
 
 # LLM configuration (for answer generation)

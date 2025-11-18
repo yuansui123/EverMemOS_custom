@@ -1,7 +1,5 @@
 """
-Answer 阶段
-
-负责生成答案。
+Answer stage - generate answers.
 """
 import asyncio
 import time
@@ -16,32 +14,35 @@ from evaluation.src.utils.checkpoint import CheckpointManager
 
 def build_context(search_result: SearchResult) -> str:
     """
-    从检索结果构建上下文
+    Build context from search results.
     
-    优先使用预格式化的context（双speaker场景），否则使用简单序号格式化（单speaker场景）
+    Prefer pre-formatted context (dual-speaker scenarios), else use simple numbering (single-speaker scenarios).
     
     Args:
-        search_result: 检索结果
+        search_result: Search result
         
     Returns:
-        上下文字符串
+        Context string
     """
-    # 优先使用预格式化的 context（由 adapter 提供）
+    # Prefer pre-formatted context (provided by adapter)
     formatted_context = search_result.retrieval_metadata.get("formatted_context", "")
     if formatted_context:
         return formatted_context
     
-    # 单 speaker 场景：简单格式化
+    # Single speaker scenario: simple formatting
     context_parts = []
     
-    # 添加记忆内容
-    for idx, result in enumerate(search_result.results[:10], 1):
+    # Get top_k from retrieval_metadata, default to len(results) if not specified
+    top_k = search_result.retrieval_metadata.get("top_k", len(search_result.results))
+    
+    # Add memory content (use top_k instead of hardcoded 10)
+    for idx, result in enumerate(search_result.results[:top_k], 1):
         content = result.get("content", "")
         context_parts.append(f"{idx}. {content}")
     
     context = "\n\n".join(context_parts)
     
-    # 对于 Memos 等支持 preferences 的系统，添加格式化的 pref_string
+    # For systems supporting preferences (e.g., Memos), add formatted pref_string
     preferences = search_result.retrieval_metadata.get("preferences", {})
     pref_string = preferences.get("pref_string", "")
     
@@ -59,32 +60,32 @@ async def run_answer_stage(
     logger: Logger,
 ) -> List[AnswerResult]:
     """
-    生成答案，支持细粒度 checkpoint
+    Generate answers with fine-grained checkpointing.
     
-    每 SAVE_INTERVAL 个问题保存一次 checkpoint
+    Save checkpoint every SAVE_INTERVAL questions.
     
     Args:
-        adapter: 系统适配器
-        qa_pairs: QA 对列表
-        search_results: 检索结果列表
-        checkpoint_manager: 断点续传管理器
-        logger: 日志器
+        adapter: System adapter
+        qa_pairs: List of QA pairs
+        search_results: List of search results
+        checkpoint_manager: Checkpoint manager for resume
+        logger: Logger
         
     Returns:
-        答案结果列表
+        List of answer results
     """
     print(f"\n{'='*60}")
     print(f"Stage 3/4: Answer")
     print(f"{'='*60}")
     
-    SAVE_INTERVAL = 400  # 每 400 个任务保存一次
-    MAX_CONCURRENT = 50  # 最大并发数
+    SAVE_INTERVAL = 400  # Save every 400 tasks
+    MAX_CONCURRENT = 50  # Max concurrency
     
-    # 加载细粒度 checkpoint
+    # Load fine-grained checkpoint
     all_answer_results = {}
     if checkpoint_manager:
         loaded_results = checkpoint_manager.load_answer_progress()
-        # 转换为 {question_id: AnswerResult} 格式
+        # Convert to {question_id: AnswerResult} format
         for result in loaded_results.values():
             all_answer_results[result["question_id"]] = result
     
@@ -96,7 +97,7 @@ async def run_answer_stage(
         print(f"Already processed: {processed_count} questions (from checkpoint)")
         print(f"Remaining: {total_qa_count - processed_count} questions")
     
-    # 准备待处理的任务
+    # Prepare pending tasks
     pending_tasks = []
     for qa, sr in zip(qa_pairs, search_results):
         if qa.question_id not in all_answer_results:
@@ -104,7 +105,7 @@ async def run_answer_stage(
     
     if not pending_tasks:
         print(f"✅ All questions already processed!")
-        # 转换为 AnswerResult 对象列表（按原始顺序）
+        # Convert to AnswerResult object list (original order)
         results = []
         for qa in qa_pairs:
             if qa.question_id in all_answer_results:
@@ -116,8 +117,8 @@ async def run_answer_stage(
                     golden_answer=result_dict["golden_answer"],
                     category=result_dict.get("category"),
                     conversation_id=result_dict.get("conversation_id", ""),
-                    formatted_context=result_dict.get("formatted_context", ""),  # 加载 formatted_context
-                    # search_results 不再加载以节省空间
+                    formatted_context=result_dict.get("formatted_context", ""),  # Load formatted_context
+                    # search_results not loaded to save space
                 ))
         return results
     
@@ -126,7 +127,7 @@ async def run_answer_stage(
     failed = 0
     start_time = time.time()
     
-    # 使用 tqdm 进度条
+    # Use tqdm progress bar
     pbar = tqdm(
         total=total_qa_count,
         initial=processed_count,
@@ -139,16 +140,16 @@ async def run_answer_stage(
         
         async with semaphore:
             try:
-                # 构建 context
+                # Build context
                 context = build_context(search_result)
                 
-                # 检测是否为选择题，如果是则增强 question
+                # Detect multiple-choice and enhance question if needed
                 query = qa.question
                 if "all_options" in qa.metadata:
                     options = qa.metadata["all_options"]
                     options_text = "\n".join([f"{key} {value}" for key, value in options.items()])
                     
-                    # 将选项和要求整合到 question 中
+                    # Integrate options and requirements into question
                     query = f"""{qa.question}
 
 OPTIONS:
@@ -156,7 +157,7 @@ OPTIONS:
 
 IMPORTANT: This is a multiple-choice question. You MUST analyze the context and select the BEST option. In your FINAL ANSWER, return ONLY the option letter like (a), (b), (c), or (d), nothing else."""
                 
-                # 直接调用 adapter 的 answer 方法
+                # Call adapter's answer method directly
                 answer = await adapter.answer(
                     query=query,
                     context=context,
@@ -177,11 +178,10 @@ IMPORTANT: This is a multiple-choice question. You MUST analyze the context and 
                 golden_answer=qa.answer,
                 category=qa.category,
                 conversation_id=search_result.conversation_id,
-                formatted_context=context,  # 保存实际使用的上下文
-                # search_results 不再保存以节省空间
+                formatted_context=context,  # Save actual context used
             )
             
-            # 保存结果
+            # Save result
             all_answer_results[qa.question_id] = {
                 "question_id": result.question_id,
                 "question": result.question,
@@ -189,14 +189,13 @@ IMPORTANT: This is a multiple-choice question. You MUST analyze the context and 
                 "golden_answer": result.golden_answer,
                 "category": result.category,
                 "conversation_id": result.conversation_id,
-                "formatted_context": result.formatted_context,  # 保存 formatted_context
-                # search_results 不再保存以节省空间
+                "formatted_context": result.formatted_context,  # Save formatted_context
             }
             
             completed += 1
-            pbar.update(1)  # 更新进度条
+            pbar.update(1)  # Update progress bar
             
-            # 定期保存 checkpoint
+            # Save checkpoint periodically
             if checkpoint_manager and (completed % SAVE_INTERVAL == 0 or completed == total_qa_count):
                 elapsed = time.time() - start_time
                 speed = completed / elapsed if elapsed > 0 else 0
@@ -209,19 +208,19 @@ IMPORTANT: This is a multiple-choice question. You MUST analyze the context and 
             
             return result
     
-    # 创建所有待处理的任务
+    # Create all pending tasks
     tasks = [
         answer_single_with_tracking(qa, sr)
         for qa, sr in pending_tasks
     ]
     
-    # 并发执行
+    # Execute concurrently
     await asyncio.gather(*tasks)
     
-    # 关闭进度条
+    # Close progress bar
     pbar.close()
     
-    # 统计信息
+    # Statistics
     elapsed_time = time.time() - start_time
     success_rate = (completed - failed) / completed * 100 if completed > 0 else 0
     
@@ -235,11 +234,11 @@ IMPORTANT: This is a multiple-choice question. You MUST analyze the context and 
     print(f"   - Average speed: {total_qa_count/elapsed_time:.1f} qa/s")
     print(f"{'='*60}\n")
     
-    # 完成后删除细粒度检查点
+    # Delete fine-grained checkpoints after completion
     if checkpoint_manager:
         checkpoint_manager.delete_answer_checkpoints()
     
-    # 转换为 AnswerResult 对象列表（按原始顺序）
+    # Convert to AnswerResult object list (original order)
     results = []
     for qa in qa_pairs:
         if qa.question_id in all_answer_results:

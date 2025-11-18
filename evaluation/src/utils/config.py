@@ -1,7 +1,7 @@
 """
-配置加载工具
+Configuration loading utilities.
 
-支持 YAML 配置文件加载，并进行环境变量替换。
+Supports YAML configuration file loading with environment variable substitution.
 """
 import os
 import yaml
@@ -12,18 +12,18 @@ from typing import Dict, Any
 
 def load_yaml(file_path: str) -> Dict[str, Any]:
     """
-    加载 YAML 配置文件
+    Load YAML configuration file.
     
     Args:
-        file_path: YAML 文件路径
+        file_path: YAML file path
         
     Returns:
-        解析后的配置字典
+        Parsed configuration dictionary
     """
     with open(file_path, 'r', encoding='utf-8') as f:
         config = yaml.safe_load(f)
     
-    # 递归替换环境变量
+    # Recursively replace environment variables
     config = _replace_env_vars(config)
     
     return config
@@ -31,16 +31,16 @@ def load_yaml(file_path: str) -> Dict[str, Any]:
 
 def _replace_env_vars(obj: Any) -> Any:
     """
-    递归替换配置中的环境变量
+    Recursively replace environment variables in configuration.
     
-    支持格式: ${VAR_NAME} 或 ${VAR_NAME:default_value}
+    Supported format: ${VAR_NAME} or ${VAR_NAME:default_value}
     """
     if isinstance(obj, dict):
         return {key: _replace_env_vars(value) for key, value in obj.items()}
     elif isinstance(obj, list):
         return [_replace_env_vars(item) for item in obj]
     elif isinstance(obj, str):
-        # 匹配 ${VAR_NAME} 或 ${VAR_NAME:default}
+        # Match ${VAR_NAME} or ${VAR_NAME:default}
         pattern = r'\$\{([^:}]+)(?::([^}]+))?\}'
         
         def replacer(match):
@@ -55,11 +55,11 @@ def _replace_env_vars(obj: Any) -> Any:
 
 def save_yaml(config: Dict[str, Any], file_path: str):
     """
-    保存配置到 YAML 文件
+    Save configuration to YAML file.
     
     Args:
-        config: 配置字典
-        file_path: 保存路径
+        config: Configuration dictionary
+        file_path: Save path
     """
     Path(file_path).parent.mkdir(parents=True, exist_ok=True)
     

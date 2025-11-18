@@ -1,7 +1,5 @@
 """
-CLI 入口
-
-评测框架的命令行接口。
+CLI entry point for the evaluation framework.
 
 Usage:
     python -m evaluation.cli --dataset locomo --system evermemos
@@ -14,11 +12,10 @@ import os
 import sys
 from pathlib import Path
 
-# ===== 环境初始化 =====
-# 必须在导入任何 EverMemOS 组件之前完成
-# 参考 src/bootstrap.py 的初始化逻辑
+# Environment initialization - must be done before importing EverMemOS components
+# Reference: src/bootstrap.py initialization logic
 
-# 1. 添加项目路径
+# Add project paths
 project_root = Path(__file__).parent.parent.resolve()
 src_path = project_root / "src"
 if str(project_root) not in sys.path:
@@ -26,11 +23,10 @@ if str(project_root) not in sys.path:
 if str(src_path) not in sys.path:
     sys.path.insert(0, str(src_path))
 
-# 2. 加载环境变量
+# Load environment variables
 from common_utils.load_env import setup_environment
 setup_environment(load_env_file_name=".env", check_env_var="MONGODB_HOST")
 
-# ===== 现在可以安全地导入 EverMemOS 组件 =====
 from evaluation.src.core.loaders import load_dataset
 from evaluation.src.core.pipeline import Pipeline
 from evaluation.src.adapters.registry import create_adapter
@@ -43,28 +39,28 @@ from memory_layer.llm.llm_provider import LLMProvider
 
 def deep_merge_config(base: dict, override: dict) -> dict:
     """
-    深度合并配置字典
+    Deep merge configuration dictionaries.
     
     Args:
-        base: 基础配置
-        override: 覆盖配置
+        base: Base configuration
+        override: Override configuration
         
     Returns:
-        合并后的配置
+        Merged configuration
     """
     result = base.copy()
     for key, value in override.items():
         if key in result and isinstance(result[key], dict) and isinstance(value, dict):
-            # 递归合并嵌套字典
+            # Recursively merge nested dictionaries
             result[key] = deep_merge_config(result[key], value)
         else:
-            # 直接覆盖
+            # Direct override
             result[key] = value
     return result
 
 
 async def main():
-    """主函数"""
+    """Main function."""
     parser = argparse.ArgumentParser(description="Memory System Evaluation Framework")
     
     parser.add_argument(
@@ -103,6 +99,18 @@ async def main():
         help="Smoke test: number of questions to test (use 0 for all). Default: 3"
     )
     parser.add_argument(
+        "--from-conv",
+        type=int,
+        default=0,
+        help="Starting conversation index to process (inclusive, 0-based). Default: 0"
+    )
+    parser.add_argument(
+        "--to-conv",
+        type=int,
+        default=None,
+        help="Ending conversation index to process (exclusive). Default: None (process all remaining)"
+    )
+    parser.add_argument(
         "--run-name",
         type=str,
         default=None,
@@ -119,12 +127,12 @@ async def main():
     
     console = get_console()
     
-    # ===== 加载配置 =====
+    # Load configurations
     console.print("\n[bold cyan]Loading configurations...[/bold cyan]")
     
     evaluation_root = Path(__file__).parent
     
-    # 加载数据集配置
+    # Load dataset configuration
     dataset_config_path = evaluation_root / "config" / "datasets" / f"{args.dataset}.yaml"
     if not dataset_config_path.exists():
         console.print(f"[red]❌ Dataset config not found: {dataset_config_path}[/red]")
@@ -133,7 +141,7 @@ async def main():
     dataset_config = load_yaml(str(dataset_config_path))
     console.print(f"  ✅ Loaded dataset config: {args.dataset}")
     
-    # 加载系统配置
+    # Load system configuration
     system_config_path = evaluation_root / "config" / "systems" / f"{args.system}.yaml"
     if not system_config_path.exists():
         console.print(f"[red]❌ System config not found: {system_config_path}[/red]")
@@ -142,19 +150,19 @@ async def main():
     system_config = load_yaml(str(system_config_path))
     console.print(f"  ✅ Loaded system config: {args.system}")
     
-    # 应用数据集特定的配置覆盖
+    # Apply dataset-specific configuration overrides
     if "dataset_overrides" in system_config and args.dataset in system_config["dataset_overrides"]:
         overrides = system_config["dataset_overrides"][args.dataset]
-        # 深度合并覆盖配置（支持嵌套字段覆盖）
+        # Deep merge override configurations (supports nested field overrides)
         system_config = deep_merge_config(system_config, overrides)
         console.print(f"  🔧 Applied dataset overrides for {args.dataset}: {list(overrides.keys())}")
     
-    # ===== 加载数据集 =====
+    # Load dataset
     console.print(f"\n[bold cyan]Loading dataset: {args.dataset}[/bold cyan]")
     
     data_path = dataset_config["data"]["path"]
     if not Path(data_path).is_absolute():
-        # 优先从 evaluation/data/ 加载，如果不存在则从项目根目录加载
+        # Priority: load from evaluation/data/, fall back to project root
         eval_data_path = evaluation_root / "data" / data_path
         root_data_path = evaluation_root.parent / data_path
         
@@ -168,25 +176,34 @@ async def main():
             console.print(f"[red]❌ Data not found in evaluation/data/ or project root data/[/red]")
             return
     
-    # 智能加载（自动转换）
-    dataset = load_dataset(args.dataset, str(data_path))
+    # Get max_content_length from dataset config (if specified)
+    max_content_length = dataset_config.get("data", {}).get("max_content_length", None)
+    if max_content_length:
+        console.print(f"  ⚠️  Max content length: {max_content_length} characters")
+    
+    # Smart load with auto conversion
+    dataset = load_dataset(args.dataset, str(data_path), max_content_length=max_content_length)
     
     console.print(f"  ✅ Loaded {len(dataset.conversations)} conversations, {len(dataset.qa_pairs)} QA pairs")
     
-    # ===== 确定输出目录 =====
+    # Determine output directory
     if args.output_dir:
         output_dir = Path(args.output_dir)
     else:
-        # 根据是否有 run_name 生成输出目录名
+        # Generate output directory name based on run_name presence
         if args.run_name:
             output_dir = evaluation_root / "results" / f"{args.dataset}-{args.system}-{args.run_name}"
         else:
             output_dir = evaluation_root / "results" / f"{args.dataset}-{args.system}"
     
-    # ===== 创建组件 =====
+    # Create components
     console.print(f"\n[bold cyan]Initializing components...[/bold cyan]")
     
-    # 创建适配器（传递 output_dir 用于持久化）
+    # Add dataset_name to system_config for adapter initialization
+    # (Used to determine num_workers based on adapter + dataset combination)
+    system_config["dataset_name"] = args.dataset
+    
+    # Create adapter (pass output_dir for persistence)
     adapter = create_adapter(
         system_config["adapter"],
         system_config,
@@ -194,14 +211,14 @@ async def main():
     )
     console.print(f"  ✅ Created adapter: {adapter.get_system_info()['name']}")
     
-    # 创建评估器
+    # Create evaluator
     evaluator = create_evaluator(
         dataset_config["evaluation"]["type"],
         dataset_config["evaluation"]
     )
     console.print(f"  ✅ Created evaluator: {evaluator.get_name()}")
     
-    # 创建 LLM Provider（用于答案生成）
+    # Create LLM Provider for answer generation
     llm_config = system_config.get("llm", {})
     llm_provider = LLMProvider(
         provider_type=llm_config.get("provider", "openai"),
@@ -211,10 +228,10 @@ async def main():
         temperature=llm_config.get("temperature", 0.0),
         max_tokens=llm_config.get("max_tokens", 32768),
     )
-    console.print(f"  ✅ Created LLM provider: {llm_config.get('model')}")
+    console.print(f"  Created LLM provider: {llm_config.get('model')}")
     
-    # ===== 创建 Pipeline =====
-    # 从数据集配置中读取需要过滤的问题类别
+    # Create pipeline
+    # Read filter categories from dataset configuration
     filter_categories = dataset_config.get("evaluation", {}).get("filter_category", [])
     
     pipeline = Pipeline(
@@ -229,7 +246,7 @@ async def main():
     if filter_categories:
         console.print(f"  📋 Filter categories: {filter_categories}")
     
-    # ===== 运行 Pipeline =====
+    # Run pipeline
     try:
         results = await pipeline.run(
             dataset=dataset,
@@ -237,14 +254,25 @@ async def main():
             smoke_test=args.smoke,
             smoke_messages=args.smoke_messages,
             smoke_questions=args.smoke_questions,
+            from_conv=args.from_conv,
+            to_conv=args.to_conv,
         )
         
         console.print(f"\n[bold green]✨ Evaluation completed![/bold green]")
         console.print(f"Results saved to: [cyan]{output_dir}[/cyan]\n")
     
     finally:
-        # ===== 清理资源 =====
-        # 只有使用了 rerank 的系统才需要清理
+        # Cleanup resources
+        # Clean up adapter session (e.g., aiohttp.ClientSession)
+        if hasattr(adapter, 'close') and callable(getattr(adapter, 'close')):
+            try:
+                await adapter.close()
+                console.print("[dim]🧹 Cleaned up adapter resources[/dim]")
+            except Exception as e:
+                # Cleanup failure doesn't affect main process
+                console.print(f"[dim]⚠️  Failed to cleanup adapter resources: {e}[/dim]")
+        
+        # Only systems using rerank need cleanup
         systems_need_rerank = ["evermemos"]
         if args.system in systems_need_rerank:
             try:
@@ -254,8 +282,8 @@ async def main():
                     await reranker.close()
                     console.print("[dim]🧹 Cleaned up rerank service resources[/dim]")
             except Exception as e:
-                # 如果清理失败也不影响主流程
-                console.print(f"[dim]⚠️  Failed to cleanup resources: {e}[/dim]")
+                # Cleanup failure doesn't affect main process
+                console.print(f"[dim]⚠️  Failed to cleanup rerank resources: {e}[/dim]")
 
 
 if __name__ == "__main__":

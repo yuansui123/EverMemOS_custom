@@ -1,14 +1,14 @@
 """
-Memos Adapter
-
-适配 Memos 在线 API 的评测框架。
+Memos Adapter - adapt Memos online API for evaluation framework.
+Reference: https://www.memos.so/
 """
+import asyncio
 import json
-import time
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
-import requests
+import aiohttp
+from aiolimiter import AsyncLimiter
 from rich.console import Console
 
 from evaluation.src.adapters.online_base import OnlineAPIAdapter
@@ -19,20 +19,20 @@ from evaluation.src.core.data_models import Conversation, SearchResult
 @register_adapter("memos")
 class MemosAdapter(OnlineAPIAdapter):
     """
-    Memos 在线 API 适配器
+    Memos online API adapter.
     
-    支持：
-    - 记忆摄入（支持对话上下文）
-    - 记忆检索
+    Supports:
+    - Memory ingestion (supports conversation context)
+    - Memory retrieval
     
-    官方 API 支持的参数：
-    - user_id (必需) - 格式：{conv_id}_{speaker}，已包含会话信息
-    - query (必需)
-    - memory_limit_number (可选，默认 6)
+    Official API supported parameters:
+    - user_id (required) - Format: {conv_id}_{speaker}, already contains session info
+    - query (required)
+    - memory_limit_number (optional, default 6)
     
-    注意：不使用 conversation_id 参数，因为 user_id 已经包含了会话信息
+    Note: Does not use conversation_id parameter, as user_id already contains session info
     
-    配置示例：
+    Config example:
     ```yaml
     adapter: "memos"
     api_url: "${MEMOS_URL}"
@@ -43,7 +43,7 @@ class MemosAdapter(OnlineAPIAdapter):
     def __init__(self, config: dict, output_dir: Path = None):
         super().__init__(config, output_dir)
         
-        # 获取 API 配置
+        # Get API configuration
         self.api_url = config.get("api_url", "")
         if not self.api_url:
             raise ValueError("Memos API URL is required. Set 'api_url' in config.")
@@ -57,427 +57,410 @@ class MemosAdapter(OnlineAPIAdapter):
             "Authorization": api_key
         }
         
-        # 检索配置（只保留 batch_size 和 max_retries，其他参数不被官方 API 支持）
-        self.batch_size = config.get("batch_size", 9999)  # Memos 支持大批量
+        # Retrieval configuration (only keep batch_size and max_retries, other params not supported by official API)
+        self.batch_size = config.get("batch_size", 9999)  # Memos supports large batches
         self.max_retries = config.get("max_retries", 5)
+        
+        # Rate limiting configuration (default: 10 requests/second)
+        requests_per_second = config.get("requests_per_second", 10)
+        self.rate_limiter = AsyncLimiter(max_rate=requests_per_second, time_period=1.0)
+        
+        # Create aiohttp session (will be initialized on first use)
+        self._session: Optional[aiohttp.ClientSession] = None
         
         self.console = Console()
         
         print(f"   API URL: {self.api_url}")
+        print(f"   Rate Limit: {requests_per_second} requests/second (async)")
     
-    async def add(
+    async def _get_session(self) -> aiohttp.ClientSession:
+        """
+        Get or create aiohttp session (lazy initialization).
+        
+        Returns:
+            aiohttp.ClientSession instance
+        """
+        if self._session is None or self._session.closed:
+            timeout = aiohttp.ClientTimeout(total=60)
+            self._session = aiohttp.ClientSession(
+                headers=self.headers,
+                timeout=timeout
+            )
+        return self._session
+    
+    async def close(self):
+        """
+        Close aiohttp session.
+        
+        Should be called when adapter is no longer needed.
+        """
+        if self._session and not self._session.closed:
+            await self._session.close()
+    
+    async def _add_user_messages(
         self, 
-        conversations: List[Conversation],
+        conv: Conversation,
+        messages: List[Dict[str, Any]],
+        speaker: str,
         **kwargs
-    ) -> Dict[str, Any]:
+    ) -> Any:
         """
-        摄入对话数据到 Memos
+        Add messages for a single user to Memos.
         
-        Memos API 特点：
-        - 需要 user_id 和 conversation_id
-        - 支持大批量添加
-        - 消息需要包含 chat_time
+        Args:
+            conv: Original conversation object
+            messages: Formatted message list
+            speaker: "speaker_a" or "speaker_b"
+            **kwargs: Extra parameters
+        
+        Returns:
+            None
         """
-        self.console.print(f"\n{'='*60}", style="bold cyan")
-        self.console.print(f"Stage 1: Adding to Memos", style="bold cyan")
-        self.console.print(f"{'='*60}", style="bold cyan")
+        # Extract user_id and conv_id
+        user_id = self._extract_user_id(conv, speaker=speaker)
+        conv_id = conv.conversation_id
         
-        conversation_ids = []
+        # Log info
+        speaker_name = conv.metadata.get(speaker, speaker)
+        self.console.print(f"   📤 Adding for {speaker_name} ({user_id}): {len(messages)} messages", style="dim")
         
-        for conv in conversations:
-            conv_id = conv.conversation_id
-            conversation_ids.append(conv_id)
-            
-            # 🔥 检测是否需要双视角处理
-            speaker_a = conv.metadata.get("speaker_a", "")
-            speaker_b = conv.metadata.get("speaker_b", "")
-            need_dual_perspective = self._need_dual_perspective(speaker_a, speaker_b)
-            
-            self.console.print(f"\n📥 Adding conversation: {conv_id}", style="cyan")
-            
-            if need_dual_perspective:
-                # 双视角处理（Locomo 风格数据）
-                self.console.print(f"   Mode: Dual Perspective", style="dim")
-                self._add_dual_perspective(conv, conv_id)
-            else:
-                # 单视角处理（标准 user/assistant 数据）
-                self.console.print(f"   Mode: Single Perspective", style="dim")
-                self._add_single_perspective(conv, conv_id)
-            
-            self.console.print(f"   ✅ Added successfully", style="green")
+        # Get session
+        session = await self._get_session()
         
-        self.console.print(f"\n✅ All conversations added to Memos", style="bold green")
-        
-        # 返回元数据
-        return {
-            "type": "online_api",
-            "system": "memos",
-            "conversation_ids": conversation_ids,
-        }
-    
-    def _need_dual_perspective(self, speaker_a: str, speaker_b: str) -> bool:
-        """
-        判断是否需要双视角处理
-        
-        单视角情况（不需要双视角）:
-        - 标准角色: "user"/"assistant"
-        - 大小写变体: "User"/"Assistant"
-        - 带后缀: "user_123"/"assistant_456"
-        
-        双视角情况（需要双视角）:
-        - 自定义名称: "Elena Rodriguez"/"Alex"
-        """
-        speaker_a_lower = speaker_a.lower()
-        speaker_b_lower = speaker_b.lower()
-        
-        # 检查是否是 user/assistant 相关的名称（放松条件）
-        def is_standard_role(speaker: str) -> bool:
-            speaker = speaker.lower()
-            # 完全匹配
-            if speaker in ["user", "assistant"]:
-                return True
-            # 以 user 或 assistant 开头（处理 user_123, assistant_456 等）
-            if speaker.startswith("user") or speaker.startswith("assistant"):
-                return True
-            return False
-        
-        # 只有当两个 speaker 都不是标准角色时，才需要双视角
-        return not (is_standard_role(speaker_a) or is_standard_role(speaker_b))
-    
-    def _add_single_perspective(self, conv: Conversation, conv_id: str):
-        """单视角添加（用于标准 user/assistant 数据）"""
-        messages = self._conversation_to_messages(conv, format_type="memos")
-        user_id = self._extract_user_id(conv, speaker="speaker_a")
-        
-        self.console.print(f"   User ID: {user_id}", style="dim")
-        self.console.print(f"   Messages: {len(messages)}", style="dim")
-        
-        self._send_messages_to_api(messages, user_id, conv_id)
-    
-    def _add_dual_perspective(self, conv: Conversation, conv_id: str):
-        """双视角添加（用于 Locomo 风格数据）"""
-        # 从 speaker_a 的视角
-        speaker_a_messages = self._conversation_to_messages(
-            conv, 
-            format_type="memos",
-            perspective="speaker_a"
-        )
-        speaker_a_id = self._extract_user_id(conv, speaker="speaker_a")
-        
-        # 从 speaker_b 的视角
-        speaker_b_messages = self._conversation_to_messages(
-            conv,
-            format_type="memos",
-            perspective="speaker_b"
-        )
-        speaker_b_id = self._extract_user_id(conv, speaker="speaker_b")
-        
-        self.console.print(f"   Speaker A ID: {speaker_a_id}", style="dim")
-        self.console.print(f"   Speaker A Messages: {len(speaker_a_messages)}", style="dim")
-        self.console.print(f"   Speaker B ID: {speaker_b_id}", style="dim")
-        self.console.print(f"   Speaker B Messages: {len(speaker_b_messages)}", style="dim")
-        
-        # 分别发送
-        self._send_messages_to_api(speaker_a_messages, speaker_a_id, conv_id)
-        self._send_messages_to_api(speaker_b_messages, speaker_b_id, conv_id)
-    
-    def _send_messages_to_api(self, messages: List[Dict], user_id: str, conv_id: str):
-        """发送消息到 Memos API"""
+        # Send messages in batches with retry
         url = f"{self.api_url}/add/message"
         
         for i in range(0, len(messages), self.batch_size):
             batch_messages = messages[i : i + self.batch_size]
             
-            payload = json.dumps(
-                {
-                    "messages": batch_messages,
-                    "user_id": user_id,
-                    "conversation_id": conv_id,
-                },
-                ensure_ascii=False
+            # Try to send the batch with automatic batch size reduction on token limit error
+            await self._send_message_batch(
+                url=url,
+                batch_messages=batch_messages,
+                user_id=user_id,
+                conv_id=conv_id,
+                speaker_name=speaker_name,
+                session=session
             )
-            
-            # 重试机制
-            for attempt in range(self.max_retries):
-                try:
-                    response = requests.post(url, data=payload, headers=self.headers, timeout=60)
-                    
-                    if response.status_code != 200:
-                        raise Exception(f"HTTP {response.status_code}: {response.text}")
-                    
-                    result = response.json()
-                    if result.get("message") != "ok":
-                        raise Exception(f"API error: {result}")
-                    
-                    break
-                except Exception as e:
-                    if attempt < self.max_retries - 1:
-                        self.console.print(
-                            f"   ⚠️  Retry {attempt + 1}/{self.max_retries}: {e}", 
-                            style="yellow"
-                        )
-                        time.sleep(2 ** attempt)
-                    else:
-                        self.console.print(f"   ❌ Failed after {self.max_retries} retries: {e}", style="red")
-                        raise e
+        
+        return None
     
-    def _search_single_user(self, query: str, user_id: str, top_k: int) -> Dict[str, Any]:
+    async def _send_message_batch(
+        self,
+        url: str,
+        batch_messages: List[Dict[str, Any]],
+        user_id: str,
+        conv_id: str,
+        speaker_name: str,
+        session: aiohttp.ClientSession
+    ) -> None:
         """
-        单用户搜索（内部方法）
+        Send a batch of messages to Memos API.
+        
+        Handles token limit exceeded errors by automatically reducing batch size to 2.
         
         Args:
-            query: 查询文本
-            user_id: 用户ID（格式：{conv_id}_{speaker}，已包含会话信息）
-            top_k: 返回记忆数量
+            url: API endpoint URL
+            batch_messages: Messages to send in this batch
+            user_id: User ID
+            conv_id: Conversation ID
+            speaker_name: Speaker name (for logging)
+            session: aiohttp session
+        """
+        payload_dict = {
+            "messages": batch_messages,
+            "user_id": user_id,
+            "conversation_id": conv_id,
+        }
+        
+        for attempt in range(self.max_retries):
+            try:
+                # Apply rate limiting
+                async with self.rate_limiter:
+                    async with session.post(url, json=payload_dict) as response:
+                        if response.status != 200:
+                            text = await response.text()
+                            raise Exception(f"HTTP {response.status}: {text}")
+                        
+                        result = await response.json()
+                        
+                        # Check for token limit exceeded error
+                        if result.get("code") == 40302 and result.get("message") == "Input token limit exceeded":
+                            # If batch size > 1, try splitting into smaller batches
+                            if len(batch_messages) > 1:
+                                # Determine new batch size: if current > 2, use 2; otherwise use 1
+                                new_batch_size = 2 if len(batch_messages) > 2 else 1
+                                self.console.print(
+                                    f"   ⚠️  [{speaker_name}] Token limit exceeded, splitting batch of {len(batch_messages)} into smaller batches (size={new_batch_size})",
+                                    style="yellow"
+                                )
+                                # Recursively send in smaller batches
+                                for j in range(0, len(batch_messages), new_batch_size):
+                                    sub_batch = batch_messages[j : j + new_batch_size]
+                                    await self._send_message_batch(
+                                        url=url,
+                                        batch_messages=sub_batch,
+                                        user_id=user_id,
+                                        conv_id=conv_id,
+                                        speaker_name=speaker_name,
+                                        session=session
+                                    )
+                                return  # Success
+                            else:
+                                # Batch size is 1, cannot split further
+                                # Try truncating the message content by removing last 1000 characters
+                                message = batch_messages[0]
+                                original_content = message.get("content", "")
+                                
+                                if len(original_content) > 1000:
+                                    self.console.print(
+                                        f"   ⚠️  [{speaker_name}] Single message token limit exceeded, truncating content (removing last 1000 chars)",
+                                        style="yellow"
+                                    )
+                                    # Create a truncated version of the message
+                                    truncated_message = message.copy()
+                                    truncated_message["content"] = original_content[:-1000]
+                                    
+                                    # Try sending the truncated message
+                                    await self._send_message_batch(
+                                        url=url,
+                                        batch_messages=[truncated_message],
+                                        user_id=user_id,
+                                        conv_id=conv_id,
+                                        speaker_name=speaker_name,
+                                        session=session
+                                    )
+                                    return  # Success
+                                else:
+                                    # Content is already short, cannot truncate further
+                                    raise Exception(f"API error (token limit, single message too large, content length={len(original_content)}): {result}")
+                        
+                        if result.get("message") != "ok":
+                            raise Exception(f"API error: {result}")
+                
+                # Success - break retry loop
+                break
+                
+            except Exception as e:
+                if attempt < self.max_retries - 1:
+                    self.console.print(
+                        f"   ⚠️  [{speaker_name}] Retry {attempt + 1}/{self.max_retries}: {e}",
+                        style="yellow"
+                    )
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
+                else:
+                    self.console.print(
+                        f"   ❌ [{speaker_name}] Failed after {self.max_retries} retries: {e}",
+                        style="red"
+                    )
+                    raise e
+    
+    async def _search_single_user(
+        self,
+        query: str,
+        conversation_id: str,
+        user_id: str,
+        top_k: int,
+        **kwargs
+    ) -> List[Dict[str, Any]]:
+        """
+        Search memories for a single user (Memos-specific with preference extraction).
+        
+        Calls Memos HTTP API and extracts preference information.
+        
+        Args:
+            query: Query text
+            conversation_id: Conversation ID (not used by Memos, user_id contains this info)
+            user_id: User ID to search for (format: {conv_id}_{speaker})
+            top_k: Number of results to retrieve
+            **kwargs: Additional parameters
         
         Returns:
-            搜索结果字典：
-            {
-                "text_mem": [{"memories": [...]}],
-                "pref_string": "Explicit Preference:\n1. ..."
-            }
+            List of search results with preference information in metadata
         
-        注意：
-            不需要传递 conversation_id 参数，因为 user_id 已经包含了会话信息。
-            例如：user_id="locomo_0_Caroline" 已经唯一标识了 locomo_0 这个会话。
+        Note:
+            user_id already contains session info (format: {conv_id}_{speaker}).
+            Example: user_id="locomo_0_Caroline" uniquely identifies the locomo_0 conversation.
         """
-        url = f"{self.api_url}/search/memory"
+        # Get session
+        session = await self._get_session()
         
-        # 只使用官方必需的参数
+        # Prepare HTTP request
+        url = f"{self.api_url}/search/memory"
         payload_dict = {
             "query": query,
             "user_id": user_id,
             "memory_limit_number": top_k,
         }
         
-        payload = json.dumps(payload_dict, ensure_ascii=False)
+        # Call API with retry mechanism
+        text_mem_res = []
+        pref_string = ""
         
-        # 重试机制
         for attempt in range(self.max_retries):
             try:
-                response = requests.post(url, data=payload, headers=self.headers, timeout=60)
+                # Apply rate limiting
+                async with self.rate_limiter:
+                    async with session.post(url, json=payload_dict) as response:
+                        if response.status != 200:
+                            text = await response.text()
+                            raise Exception(f"HTTP {response.status}: {text}")
+                        
+                        result = await response.json()
+                        if result.get("message") != "ok":
+                            raise Exception(f"API error: {result}")
+                        
+                        data = result.get("data", {})
+                        text_mem_res = data.get("memory_detail_list", [])
+                        pref_mem_res = data.get("preference_detail_list", [])
+                        preference_note = data.get("preference_note", "")
+                        
+                        # Standardize field names: rename memory_value to memory
+                        for i in text_mem_res:
+                            i.update({"memory": i.pop("memory_value", i.get("memory", ""))})
+                        
+                        # Format preference string
+                        explicit_prefs = [
+                            p["preference"]
+                            for p in pref_mem_res
+                            if p.get("preference_type", "") == "explicit_preference"
+                        ]
+                        implicit_prefs = [
+                            p["preference"]
+                            for p in pref_mem_res
+                            if p.get("preference_type", "") == "implicit_preference"
+                        ]
+                        
+                        pref_parts = []
+                        if explicit_prefs:
+                            pref_parts.append(
+                                "Explicit Preference:\n"
+                                + "\n".join(f"{i + 1}. {p}" for i, p in enumerate(explicit_prefs))
+                            )
+                        if implicit_prefs:
+                            pref_parts.append(
+                                "Implicit Preference:\n"
+                                + "\n".join(f"{i + 1}. {p}" for i, p in enumerate(implicit_prefs))
+                            )
+                        
+                        pref_string = "\n".join(pref_parts) + preference_note
                 
-                if response.status_code != 200:
-                    raise Exception(f"HTTP {response.status_code}: {response.text}")
+                # Success - break retry loop
+                break
                 
-                result = response.json()
-                if result.get("message") != "ok":
-                    raise Exception(f"API error: {result}")
-                
-                data = result.get("data", {})
-                text_mem_res = data.get("memory_detail_list", [])
-                pref_mem_res = data.get("preference_detail_list", [])
-                preference_note = data.get("preference_note", "")
-                
-                # 标准化字段名：将 memory_value 重命名为 memory
-                for i in text_mem_res:
-                    i.update({"memory": i.pop("memory_value", i.get("memory", ""))})
-                
-                # 格式化偏好字符串
-                explicit_prefs = [
-                    p["preference"]
-                    for p in pref_mem_res
-                    if p.get("preference_type", "") == "explicit_preference"
-                ]
-                implicit_prefs = [
-                    p["preference"]
-                    for p in pref_mem_res
-                    if p.get("preference_type", "") == "implicit_preference"
-                ]
-                
-                pref_parts = []
-                if explicit_prefs:
-                    pref_parts.append(
-                        "Explicit Preference:\n"
-                        + "\n".join(f"{i + 1}. {p}" for i, p in enumerate(explicit_prefs))
-                    )
-                if implicit_prefs:
-                    pref_parts.append(
-                        "Implicit Preference:\n"
-                        + "\n".join(f"{i + 1}. {p}" for i, p in enumerate(implicit_prefs))
-                    )
-                
-                pref_string = "\n".join(pref_parts) + preference_note
-                
-                return {"text_mem": [{"memories": text_mem_res}], "pref_string": pref_string}
             except Exception as e:
                 if attempt < self.max_retries - 1:
-                    time.sleep(2 ** attempt)
+                    await asyncio.sleep(2 ** attempt)  # Exponential backoff
                 else:
-                    raise e
+                    self.console.print(f"❌ Memos search error: {e}", style="red")
+                    return []
         
-        return {"text_mem": [{"memories": []}], "pref_string": ""}
-    
-    async def search(
-        self,
-        query: str,
-        conversation_id: str,
-        index: Any,
-        **kwargs
-    ) -> SearchResult:
-        """
-        从 Memos 检索相关记忆
-        
-        Memos 特点：
-        - 支持偏好提取（explicit/implicit preferences）
-        - 支持多种检索模式
-        - 🔥 支持双视角搜索（Locomo风格数据）
-        """
-        top_k = kwargs.get("top_k", 10)
-        
-        # 🔥 从 kwargs 直接获取对话信息（不使用缓存）
-        conversation = kwargs.get("conversation")
-        if conversation:
-            speaker_a = conversation.metadata.get("speaker_a", "")
-            speaker_b = conversation.metadata.get("speaker_b", "")
-            speaker_a_user_id = self._extract_user_id(conversation, speaker="speaker_a")
-            speaker_b_user_id = self._extract_user_id(conversation, speaker="speaker_b")
-            need_dual_perspective = self._need_dual_perspective(speaker_a, speaker_b)
-        else:
-            # 回退方案：使用默认 user_id
-            speaker_a_user_id = f"{conversation_id}_speaker_a"
-            speaker_b_user_id = f"{conversation_id}_speaker_b"
-            speaker_a = "speaker_a"
-            speaker_b = "speaker_b"
-            need_dual_perspective = False
-        
-        if need_dual_perspective:
-            # 🔥 双视角搜索：从两个 speaker 的视角分别搜索
-            return await self._search_dual_perspective(
-                query, conversation_id, speaker_a, speaker_b,
-                speaker_a_user_id, speaker_b_user_id, top_k
-            )
-        else:
-            # 单视角搜索（标准 user/assistant 数据）
-            return await self._search_single_perspective(
-                query, conversation_id, speaker_a_user_id, top_k
-            )
-    
-    async def _search_single_perspective(
-        self, query: str, conversation_id: str, user_id: str, top_k: int
-    ) -> SearchResult:
-        """单视角搜索（用于标准 user/assistant 数据）"""
-        
-        try:
-            search_data = self._search_single_user(query, user_id, top_k)
-        except Exception as e:
-            self.console.print(f"❌ Memos search error: {e}", style="red")
-            return SearchResult(
-                query=query,
-                conversation_id=conversation_id,
-                results=[],
-                retrieval_metadata={"error": str(e)}
-            )
-        
-        # 转换为标准 SearchResult 格式
-        search_results = []
-        for item in search_data["text_mem"][0]["memories"]:
+        # Convert to standard format
+        results = []
+        for item in text_mem_res:
             created_at = item.get("memory_time") or item.get("create_time", "")
-            search_results.append({
+            results.append({
                 "content": item.get("memory", ""),
                 "score": item.get("relativity", item.get("score", 0.0)),
-                "user_id": user_id,  # 🔥 添加 user_id 标记记忆来源
+                "user_id": user_id,
                 "metadata": {
                     "memory_id": item.get("id", ""),
                     "created_at": str(created_at) if created_at else "",
                     "memory_type": item.get("memory_type", ""),
                     "confidence": item.get("confidence", 0.0),
                     "tags": item.get("tags", []),
+                    "pref_string": pref_string,  # Store preference for this user
                 }
             })
         
-        # 偏好信息已经格式化好了
-        pref_string = search_data.get("pref_string", "")
+        return results
+    
+    def _build_single_search_result(
+        self,
+        query: str,
+        conversation_id: str,
+        results: List[Dict[str, Any]],
+        user_id: str,
+        top_k: int,
+        **kwargs
+    ) -> SearchResult:
+        """
+        Build SearchResult for single perspective (Memos: include preference).
+        
+        Args:
+            query: Query text
+            conversation_id: Conversation ID
+            results: Search results from _search_single_user
+            user_id: User ID
+            top_k: Number of results requested
+            **kwargs: Additional parameters
+        
+        Returns:
+            SearchResult with preference metadata (no formatted_context, uses fallback)
+        """
+        # Extract pref_string from first result's metadata (all results share same pref_string)
+        pref_string = results[0]["metadata"]["pref_string"] if results else ""
         
         return SearchResult(
             query=query,
             conversation_id=conversation_id,
-            results=search_results,
+            results=results,
             retrieval_metadata={
                 "system": "memos",
                 "preferences": {"pref_string": pref_string},
                 "top_k": top_k,
-                "user_ids": [user_id],  # 单视角：只有一个 user_id
+                "user_ids": [user_id],
             }
         )
     
-    async def _search_dual_perspective(
+    def _build_dual_search_result(
         self,
         query: str,
         conversation_id: str,
+        all_results: List[Dict[str, Any]],
+        results_a: List[Dict[str, Any]],
+        results_b: List[Dict[str, Any]],
         speaker_a: str,
         speaker_b: str,
         speaker_a_user_id: str,
         speaker_b_user_id: str,
-        top_k: int
+        top_k: int,
+        **kwargs
     ) -> SearchResult:
         """
-        双视角搜索（用于自定义 speaker 名称的数据）
+        Build SearchResult for dual perspective (Memos: use template + preference).
         
-        同时搜索两个 speaker 的记忆并合并结果
+        Formats memories using the default template, including preference information
+        for both speakers.
+        
+        Args:
+            query: Query text
+            conversation_id: Conversation ID
+            all_results: Merged results (for fallback)
+            results_a: Speaker A's search results
+            results_b: Speaker B's search results
+            speaker_a: Speaker A name
+            speaker_b: Speaker B name
+            speaker_a_user_id: Speaker A user ID
+            speaker_b_user_id: Speaker B user ID
+            top_k: Number of results per user
+            **kwargs: Additional parameters
+        
+        Returns:
+            SearchResult with formatted_context and preferences
         """
+        # Extract preferences from results' metadata
+        pref_a = results_a[0]["metadata"]["pref_string"] if results_a else ""
+        pref_b = results_b[0]["metadata"]["pref_string"] if results_b else ""
         
-        try:
-            # 分别搜索两个 user_id
-            search_a_results = self._search_single_user(query, speaker_a_user_id, top_k)
-            search_b_results = self._search_single_user(query, speaker_b_user_id, top_k)
-        except Exception as e:
-            self.console.print(f"❌ Memos dual search error: {e}", style="red")
-            return SearchResult(
-                query=query,
-                conversation_id=conversation_id,
-                results=[],
-                retrieval_metadata={
-                    "error": str(e),
-                    "user_ids": [speaker_a_user_id, speaker_b_user_id],
-                    "dual_perspective": True,
-                }
-            )
+        # Build context for each speaker (memories + preferences)
+        speaker_a_memories = "\n".join([r["content"] for r in results_a]) if results_a else "(No memories found)"
+        speaker_b_memories = "\n".join([r["content"] for r in results_b]) if results_b else "(No memories found)"
         
-        # 🔥 构建详细的 results 列表（为每条记忆添加 user_id）
-        all_results = []
+        speaker_a_context = speaker_a_memories + (f"\n{pref_a}" if pref_a else "")
+        speaker_b_context = speaker_b_memories + (f"\n{pref_b}" if pref_b else "")
         
-        # Speaker A 的记忆
-        for memory in search_a_results["text_mem"][0]["memories"]:
-            all_results.append({
-                "content": memory.get("memory", ""),
-                "score": memory.get("relativity", 0.0),  # 🔥 修复：使用 relativity 字段
-                "user_id": speaker_a_user_id,  # 标记来源
-                "metadata": {
-                    "memory_id": memory.get("memory_id", ""),
-                    "created_at": memory.get("created_at", ""),
-                    "memory_type": memory.get("memory_type", ""),
-                    "confidence": memory.get("confidence", 0.0),
-                    "tags": memory.get("tags", []),
-                }
-            })
-        
-        # Speaker B 的记忆
-        for memory in search_b_results["text_mem"][0]["memories"]:
-            all_results.append({
-                "content": memory.get("memory", ""),
-                "score": memory.get("relativity", 0.0),  # 🔥 修复：使用 relativity 字段
-                "user_id": speaker_b_user_id,  # 标记来源
-                "metadata": {
-                    "memory_id": memory.get("memory_id", ""),
-                    "created_at": memory.get("created_at", ""),
-                    "memory_type": memory.get("memory_type", ""),
-                    "confidence": memory.get("confidence", 0.0),
-                    "tags": memory.get("tags", []),
-                }
-            })
-        
-        # 合并两个 speaker 的记忆和偏好（用于 formatted_context）
-        speaker_a_context = (
-            "\n".join([i["memory"] for i in search_a_results["text_mem"][0]["memories"]])
-            + f"\n{search_a_results.get('pref_string', '')}"
-        )
-        speaker_b_context = (
-            "\n".join([i["memory"] for i in search_b_results["text_mem"][0]["memories"]])
-            + f"\n{search_b_results.get('pref_string', '')}"
-        )
-        
-        # 使用 default template 格式化
+        # Use default template
         template = self._prompts["online_api"].get("templates", {}).get("default", "")
         formatted_context = template.format(
             speaker_1=speaker_a,
@@ -489,22 +472,30 @@ class MemosAdapter(OnlineAPIAdapter):
         return SearchResult(
             query=query,
             conversation_id=conversation_id,
-            results=all_results,  # 🔥 返回详细的记忆列表（每条带 user_id）
+            results=all_results,
             retrieval_metadata={
                 "system": "memos",
                 "dual_perspective": True,
-                "formatted_context": formatted_context,  # 套用 template 后的结果
+                "formatted_context": formatted_context,
                 "top_k": top_k,
                 "user_ids": [speaker_a_user_id, speaker_b_user_id],
                 "preferences": {
-                    "speaker_a_pref": search_a_results.get("pref_string", ""),
-                    "speaker_b_pref": search_b_results.get("pref_string", ""),
+                    "speaker_a_pref": pref_a,
+                    "speaker_b_pref": pref_b,
                 }
             }
         )
-    
+    def _get_answer_prompt(self) -> str:
+        """
+        Get answer prompt.
+        
+        Subclasses can override this method to return their own prompt.
+        Defaults to generic default prompt.
+        """
+        return self._prompts["online_api"]["default"]["answer_prompt_memos"]
+
     def get_system_info(self) -> Dict[str, Any]:
-        """返回系统信息"""
+        """Return system info."""
         return {
             "name": "Memos",
             "type": "online_api",
@@ -512,3 +503,5 @@ class MemosAdapter(OnlineAPIAdapter):
             "adapter": "MemosAdapter",
         }
 
+
+   

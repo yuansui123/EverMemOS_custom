@@ -1,7 +1,8 @@
 """
-核心数据模型
+Core data models.
 
-定义评测框架中使用的标准数据格式，确保不同系统和数据集之间的互操作性。
+Define standard data formats for the evaluation framework to ensure interoperability
+between different systems and datasets.
 """
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
@@ -10,17 +11,17 @@ from datetime import datetime
 
 @dataclass
 class Message:
-    """标准消息格式"""
+    """Standard message format."""
     speaker_id: str
     speaker_name: str
     content: str
-    timestamp: Optional[datetime] = None  # 时间戳可选，某些数据集（如 PersonaMem）没有时间信息
+    timestamp: Optional[datetime] = None  # Optional, some datasets (e.g., PersonaMem) lack timestamps
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class Conversation:
-    """标准对话格式"""
+    """Standard conversation format."""
     conversation_id: str
     messages: List[Message]
     metadata: Dict[str, Any] = field(default_factory=dict)
@@ -29,21 +30,21 @@ class Conversation:
 @dataclass
 class QAPair:
     """
-    标准 QA 对格式
+    Standard QA pair format.
     
-    注意：category字段统一为字符串类型，以兼容不同数据集的格式
+    Note: category field is unified as string type to be compatible with different datasets.
     """
     question_id: str
     question: str
     answer: str
-    category: Optional[str] = None  # 统一为字符串类型
+    category: Optional[str] = None  # Unified as string type
     evidence: List[str] = field(default_factory=list)
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class Dataset:
-    """标准数据集格式"""
+    """Standard dataset format."""
     dataset_name: str
     conversations: List[Conversation]
     qa_pairs: List[QAPair]
@@ -52,7 +53,7 @@ class Dataset:
 
 @dataclass
 class SearchResult:
-    """标准检索结果格式"""
+    """Standard search result format."""
     query: str
     conversation_id: str
     results: List[Dict[str, Any]]  # [{"content": str, "score": float, "metadata": dict}]
@@ -61,21 +62,21 @@ class SearchResult:
 
 @dataclass
 class AnswerResult:
-    """标准答案结果格式"""
+    """Standard answer result format."""
     question_id: str
     question: str
     answer: str
     golden_answer: str
     category: Optional[int] = None
     conversation_id: str = ""
-    formatted_context: str = ""  # 实际使用的上下文
-    search_results: List[Dict[str, Any]] = field(default_factory=list)  # 可选：详细检索结果（用于调试）
+    formatted_context: str = ""  # Actual context used
+    search_results: List[Dict[str, Any]] = field(default_factory=list) 
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class EvaluationResult:
-    """标准评估结果格式"""
+    """Standard evaluation result format."""
     total_questions: int
     correct: int
     accuracy: float

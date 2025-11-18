@@ -1,7 +1,5 @@
 """
-LongMemEval Converter
-
-将 LongMemEval 数据集转换为 Locomo 格式。
+LongMemEval Converter - convert LongMemEval dataset to Locomo format.
 """
 import json
 from datetime import datetime
@@ -14,23 +12,23 @@ from evaluation.src.converters.registry import register_converter
 
 def convert_time_format(input_str: str) -> str:
     """
-    将格式为 "YYYY/MM/DD (Day) HH:MM" 的时间字符串
-    转换为 "H:MM am/pm on D Month, YYYY" 的格式。
+    Convert time string from "YYYY/MM/DD (Day) HH:MM" format
+    to "H:MM am/pm on D Month, YYYY" format.
     """
-    # 输入格式: %Y: 年份, %m: 月份, %d: 日期, %a: 星期缩写, %H: 24小时制小时, %M: 分钟
+    # Input format: %Y: year, %m: month, %d: day, %a: weekday abbr, %H: 24-hour, %M: minute
     input_format = "%Y/%m/%d (%a) %H:%M"
     
-    # 解析输入字符串为 datetime 对象
+    # Parse input string to datetime object
     dt_object = datetime.strptime(input_str, input_format)
     
-    # 输出格式: %-I: 12小时制小时(无前导零), %M: 分钟, %p: AM/PM, 
-    #          %-d: 日期(无前导零), %B: 月份全称, %Y: 年份
+    # Output format: %-I: 12-hour (no leading zero), %M: minute, %p: AM/PM, 
+    #                %-d: day (no leading zero), %B: full month name, %Y: year
     output_format = "%-I:%M %p on %-d %B, %Y"
     
-    # 格式化为目标字符串，并将 AM/PM 转为小写
+    # Format to target string and convert AM/PM to lowercase
     formatted_string = dt_object.strftime(output_format).lower()
     
-    # 确保月份首字母大写
+    # Ensure month is capitalized
     parts = formatted_string.split(' ')
     parts[4] = parts[4].capitalize()
     
@@ -39,13 +37,13 @@ def convert_time_format(input_str: str) -> str:
 
 def convert_lmeval_s_to_locomo_style(lmeval_data: list) -> list:
     """
-    将 LongMemEval-S 格式转换为 Locomo 格式
+    Convert LongMemEval-S format to Locomo format.
     
     Args:
-        lmeval_data: LongMemEval-S 原始数据
+        lmeval_data: LongMemEval-S raw data
         
     Returns:
-        Locomo 格式数据
+        Locomo format data
     """
     locomo_style_data = []
     
@@ -55,25 +53,25 @@ def convert_lmeval_s_to_locomo_style(lmeval_data: list) -> list:
             "conversation": {}
         }
         
-        # 找出包含答案的 session 索引
+        # Find session indices containing answers
         evidence_session_idx = []
         for idx, session_id in enumerate(data["haystack_session_ids"]):
             if session_id in data["answer_session_ids"]:
                 evidence_session_idx.append(idx)
         
-        # 标记包含答案的消息
+        # Mark messages containing answers
         for idx, session in enumerate(data["haystack_sessions"]):
             for i, msg in enumerate(session):
                 data["haystack_sessions"][idx][i]["has_answer"] = idx in evidence_session_idx
         
-        # 收集 evidence
+        # Collect evidence
         evidence = []
         for idx, session in enumerate(data["haystack_sessions"]):
             for i, msg in enumerate(session):
                 if msg["has_answer"]:
                     evidence.append(f"D{idx}:{i}")
         
-        # 构建 QA
+        # Build QA
         data_dict["qa"].append({
             "question_id": data["question_id"],
             "question": data["question"],
@@ -82,7 +80,7 @@ def convert_lmeval_s_to_locomo_style(lmeval_data: list) -> list:
             "category": data["question_type"]
         })
         
-        # 构建对话
+        # Build conversation
         data_dict["conversation"]["speaker_a"] = f"user_{data['question_id']}"
         data_dict["conversation"]["speaker_b"] = f"assistant_{data['question_id']}"
         
@@ -106,38 +104,38 @@ def convert_lmeval_s_to_locomo_style(lmeval_data: list) -> list:
 
 @register_converter("longmemeval")
 class LongMemEvalConverter(BaseConverter):
-    """LongMemEval 数据集转换器"""
+    """LongMemEval dataset converter."""
     
     def get_input_files(self) -> Dict[str, str]:
-        """返回需要的输入文件"""
+        """Return required input files."""
         return {
             "raw": "longmemeval_s_cleaned.json"
         }
     
     def get_output_filename(self) -> str:
-        """返回输出文件名"""
+        """Return output filename."""
         return "longmemeval_s_locomo_style.json"
     
     def convert(self, input_paths: Dict[str, str], output_path: str) -> None:
         """
-        执行转换
+        Execute conversion.
         
         Args:
             input_paths: {"raw": "path/to/longmemeval_s_cleaned.json"}
-            output_path: 输出文件路径
+            output_path: Output file path
         """
         print(f"🔄 Converting LongMemEval to Locomo format...")
         
-        # 读取原始数据
+        # Read raw data
         with open(input_paths["raw"], "r", encoding="utf-8") as f:
             lmeval_data = json.load(f)
         
         print(f"   Loaded {len(lmeval_data)} items")
         
-        # 转换格式
+        # Convert format
         locomo_style_data = convert_lmeval_s_to_locomo_style(lmeval_data)
         
-        # 保存结果
+        # Save result
         with open(output_path, "w", encoding="utf-8") as f:
             json.dump(locomo_style_data, f, indent=2, ensure_ascii=False)
         

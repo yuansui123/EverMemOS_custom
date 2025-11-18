@@ -1,7 +1,5 @@
 """
-Base Converter
-
-定义数据集转换器的基类接口。
+Base Converter - define dataset converter base class interface.
 """
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -9,60 +7,60 @@ from typing import Dict, Any
 
 
 class BaseConverter(ABC):
-    """数据集转换器基类"""
+    """Dataset converter base class."""
     
     @abstractmethod
     def convert(self, input_paths: Dict[str, str], output_path: str) -> None:
         """
-        将数据集转换为 Locomo 格式
+        Convert dataset to Locomo format.
         
         Args:
-            input_paths: 输入文件路径字典，如 {"raw": "path/to/raw.json"}
-            output_path: 输出文件路径
+            input_paths: Input file path dict, e.g., {"raw": "path/to/raw.json"}
+            output_path: Output file path
         """
         pass
     
     @abstractmethod
     def get_input_files(self) -> Dict[str, str]:
         """
-        返回需要的输入文件列表
+        Return required input file list.
         
         Returns:
-            文件名映射，如 {"raw": "longmemeval_s_cleaned.json"}
+            File name mapping, e.g., {"raw": "longmemeval_s_cleaned.json"}
         """
         pass
     
     def get_output_filename(self) -> str:
         """
-        返回输出文件名（converted 版本）
+        Return output filename (converted version).
         
         Returns:
-            文件名，如 "longmemeval_s_locomo_style.json"
+            Filename, e.g., "longmemeval_s_locomo_style.json"
         """
         return "converted_locomo_style.json"
     
     def needs_conversion(self, data_dir: Path) -> bool:
         """
-        检查是否需要转换（converted 文件是否存在）
+        Check if conversion needed (whether converted file exists).
         
         Args:
-            data_dir: 数据集目录
+            data_dir: Dataset directory
             
         Returns:
-            True 如果需要转换，False 如果已存在 converted 版本
+            True if conversion needed, False if converted version exists
         """
         output_file = data_dir / self.get_output_filename()
         return not output_file.exists()
     
     def get_converted_path(self, data_dir: Path) -> Path:
         """
-        获取 converted 文件的路径
+        Get converted file path.
         
         Args:
-            data_dir: 数据集目录
+            data_dir: Dataset directory
             
         Returns:
-            converted 文件路径
+            Converted file path
         """
         return data_dir / self.get_output_filename()
 

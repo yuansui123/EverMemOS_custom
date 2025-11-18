@@ -1,7 +1,5 @@
 """
-Prompt Utilities
-
-提供 prompt 加载和格式化功能。
+Prompt utilities - provide prompt loading and formatting.
 """
 from pathlib import Path
 from typing import Dict, Any
@@ -9,7 +7,7 @@ import yaml
 
 
 class PromptManager:
-    """Prompt 管理器"""
+    """Prompt manager."""
     
     _instance = None
     _prompts = None
@@ -24,8 +22,8 @@ class PromptManager:
             self._load_prompts()
     
     def _load_prompts(self):
-        """加载 prompts 配置文件"""
-        # 找到 config/prompts.yaml
+        """Load prompts config file."""
+        # Find config/prompts.yaml
         current_file = Path(__file__)
         config_path = current_file.parent.parent.parent / "config" / "prompts.yaml"
         
@@ -37,14 +35,14 @@ class PromptManager:
     
     def get_prompt(self, prompt_key: str, sub_key: str = None) -> str:
         """
-        获取 prompt 模板
+        Get prompt template.
         
         Args:
-            prompt_key: Prompt 类别键（如 "answer_generation", "llm_judge"）
-            sub_key: 子键（如 "system_prompt", "user_prompt"）
+            prompt_key: Prompt category key (e.g., "answer_generation", "llm_judge")
+            sub_key: Sub-key (e.g., "system_prompt", "user_prompt")
             
         Returns:
-            Prompt 模板字符串
+            Prompt template string
         
         Example:
             >>> pm = PromptManager()
@@ -65,7 +63,7 @@ class PromptManager:
                 )
             return prompt_config[sub_key].strip()
         
-        # 如果没有 sub_key，默认返回 'template'
+        # If no sub_key, default to 'template'
         if "template" in prompt_config:
             return prompt_config["template"].strip()
         
@@ -81,15 +79,15 @@ class PromptManager:
         **kwargs
     ) -> str:
         """
-        获取并格式化 prompt
+        Get and format prompt.
         
         Args:
-            prompt_key: Prompt 类别键
-            sub_key: 子键
-            **kwargs: 格式化参数
+            prompt_key: Prompt category key
+            sub_key: Sub-key
+            **kwargs: Formatting parameters
             
         Returns:
-            格式化后的 prompt
+            Formatted prompt
         
         Example:
             >>> pm = PromptManager()
@@ -104,12 +102,12 @@ class PromptManager:
         return template.format(**kwargs)
 
 
-# 全局实例
+# Global instance
 _prompt_manager = None
 
 
 def get_prompt_manager() -> PromptManager:
-    """获取全局 PromptManager 实例"""
+    """Get global PromptManager instance."""
     global _prompt_manager
     if _prompt_manager is None:
         _prompt_manager = PromptManager()
@@ -117,12 +115,12 @@ def get_prompt_manager() -> PromptManager:
 
 
 def get_prompt(prompt_key: str, sub_key: str = None) -> str:
-    """快捷方法：获取 prompt"""
+    """Shortcut: get prompt."""
     return get_prompt_manager().get_prompt(prompt_key, sub_key)
 
 
 def format_prompt(prompt_key: str, sub_key: str = None, **kwargs) -> str:
-    """快捷方法：格式化 prompt"""
+    """Shortcut: format prompt."""
     return get_prompt_manager().format_prompt(prompt_key, sub_key, **kwargs)
 
 

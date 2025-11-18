@@ -1,7 +1,5 @@
 """
-Adapter 基类
-
-定义记忆系统适配器的统一接口。
+Adapter base class - define unified memory system adapter interface.
 """
 from abc import ABC, abstractmethod
 from typing import Any, List, Dict
@@ -9,14 +7,14 @@ from evaluation.src.core.data_models import Conversation, SearchResult
 
 
 class BaseAdapter(ABC):
-    """记忆系统适配器基类"""
+    """Memory system adapter base class."""
     
     def __init__(self, config: dict):
         """
-        初始化适配器
+        Initialize adapter.
         
         Args:
-            config: 系统配置字典
+            config: System config dict
         """
         self.config = config
     
@@ -27,19 +25,19 @@ class BaseAdapter(ABC):
         **kwargs
     ) -> Any:
         """
-        摄入对话数据并构建索引（Add 阶段）
+        Ingest conversation data and build index (Add stage).
         
-        这个方法封装了系统特定的数据摄入和索引构建逻辑：
-        - 对于 EverMemOS: MemCell 提取 + BM25/Embedding 索引构建
-        - 对于 Mem0: 直接存储到向量数据库
-        - 对于其他系统: 各自的实现方式
+        This method encapsulates system-specific data ingestion and index building:
+        - For EverMemOS: MemCell extraction + BM25/Embedding index building
+        - For Mem0: Direct storage to vector database
+        - For other systems: Their respective implementations
         
         Args:
-            conversations: 标准格式的对话列表
-            **kwargs: 额外参数
+            conversations: Standard format conversation list
+            **kwargs: Extra parameters
             
         Returns:
-            索引对象（系统内部格式，不同系统返回不同类型）
+            Index object (system internal format, different systems return different types)
         """
         pass
     
@@ -52,43 +50,43 @@ class BaseAdapter(ABC):
         **kwargs
     ) -> SearchResult:
         """
-        检索相关记忆（Search 阶段）
+        Retrieve relevant memories (Search stage).
         
         Args:
-            query: 查询文本
-            conversation_id: 对话 ID
-            index: 索引对象（由 add() 返回）
-            **kwargs: 额外参数（如 top_k）
+            query: Query text
+            conversation_id: Conversation ID
+            index: Index object (returned by add())
+            **kwargs: Extra parameters (e.g., top_k)
             
         Returns:
-            SearchResult: 标准格式的检索结果
+            Standard format search result
         """
         pass
     
     async def prepare(self, conversations: List[Conversation], **kwargs) -> None:
         """
-        准备阶段：在 add 之前执行的操作
+        Preparation stage: operations executed before add.
         
-        可选的准备操作，例如：
-        - 更新项目配置（如 Mem0 的 custom_instructions）
-        - 清理已有数据（如果配置了 clean_before_add）
-        - 其他系统特定的初始化
+        Optional preparation operations, e.g.:
+        - Update project config (e.g., Mem0's custom_instructions)
+        - Clean existing data (if clean_before_add configured)
+        - Other system-specific initialization
         
         Args:
-            conversations: 标准格式的对话列表（用于提取 user_id 等信息）
-            **kwargs: 额外参数
+            conversations: Standard format conversation list (for extracting user_id etc.)
+            **kwargs: Extra parameters
         
         Returns:
             None
         """
-        pass  # 默认实现：不做任何操作
+        pass  # Default: no operation
     
     def get_system_info(self) -> Dict[str, Any]:
         """
-        返回系统信息（用于结果记录）
+        Return system info (for result recording).
         
         Returns:
-            系统信息字典
+            System info dict
         """
         return {
             "name": self.__class__.__name__,
@@ -97,17 +95,17 @@ class BaseAdapter(ABC):
     
     def build_lazy_index(self, conversations: List[Conversation], output_dir: Any) -> Any:
         """
-        构建延迟加载的索引元数据
+        Build lazy-loaded index metadata.
         
-        🔥 默认实现：返回 None（在线 API 系统不需要索引）
-        🔥 本地系统（如 EverMemOS）应该重写此方法
+        Default: return None (online API systems don't need index)
+        Local systems (e.g., EverMemOS) should override this method
         
         Args:
-            conversations: 对话列表
-            output_dir: 输出目录
+            conversations: Conversation list
+            output_dir: Output directory
             
         Returns:
-            索引对象或元数据（本地系统返回索引元数据，在线系统返回 None）
+            Index object or metadata (local systems return index metadata, online systems return None)
         """
         return None
 

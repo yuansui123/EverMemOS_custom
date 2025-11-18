@@ -297,9 +297,9 @@ uv run python -m evaluation.cli --dataset locomo --system evermemos_custom
 - **evermemos** - EvermemOS with MemCell extraction and dual-mode retrieval
 
 ### Online API Systems
-- **mem0** - Mem0 API
-- **memos** - memOS API  
-- **memu** - memU HTTP API
+- **mem0** 
+- **memos** 
+- **memu** 
 
 ## 📚 Supported Datasets
 

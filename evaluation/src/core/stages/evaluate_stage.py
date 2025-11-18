@@ -1,7 +1,5 @@
 """
-Evaluate 阶段
-
-负责评估答案质量。
+Evaluate stage - evaluate answer quality.
 """
 from typing import List, Optional
 from logging import Logger
@@ -18,16 +16,16 @@ async def run_evaluate_stage(
     logger: Logger,
 ) -> EvaluationResult:
     """
-    执行 Evaluate 阶段
+    Execute Evaluate stage.
     
     Args:
-        evaluator: 评估器
-        answer_results: 答案结果列表
-        checkpoint_manager: 断点续传管理器
-        logger: 日志器
+        evaluator: Evaluator
+        answer_results: List of answer results
+        checkpoint_manager: Checkpoint manager for resume
+        logger: Logger
         
     Returns:
-        评估结果
+        Evaluation result
     """
     logger.info("Starting Stage 4: Evaluate")
     
