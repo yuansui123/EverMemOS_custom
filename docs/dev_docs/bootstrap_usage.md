@@ -1,145 +1,146 @@
-# Bootstrap 脚本使用指南
+# Bootstrap Script Usage Guide
 
-## 概述
+## Overview
 
-`src/bootstrap.py` 是一个脚本运行器，让您能够无认知负担地运行任何测试脚本，自动处理所有环境设置。
+`src/bootstrap.py` is a script runner that allows you to run any test script with zero cognitive overhead, automatically handling all environment setup.
 
-## 基本用法
+## Basic Usage
 
 ```bash
-python src/bootstrap.py [脚本路径] [脚本参数...]
+python src/bootstrap.py [script_path] [script_arguments...]
 ```
 
-脚本路径可以是：
-- 相对于项目根目录的路径：`unit_test/memory_manager_single_test.py`
-- 相对于当前目录的路径：`../tests/test_convert_rest.py`
-- 绝对路径：`/path/to/your/script.py`
+The script path can be:
+- Relative to the project root: `unit_test/memory_manager_single_test.py`
+- Relative to the current directory: `../tests/test_convert_rest.py`
+- Absolute path: `/path/to/your/script.py`
 
-## 使用示例
+## Usage Examples
 
-### 1. 运行单元测试
+### 1. Run Unit Tests
 
 ```bash
-# 运行内存管理器测试
+# Run memory manager test
 python src/bootstrap.py unit_test/memory_manager_single_test.py
 
-# 使用相对路径运行测试
+# Run test with relative path
 python src/bootstrap.py ../tests/test_convert_rest.py
 
-# 运行带参数的测试
+# Run test with arguments
 python src/bootstrap.py unit_test/memory_manager_single_test.py --verbose
 ```
 
-### 2. 运行评估脚本
+### 2. Run Evaluation Scripts
 
 ```bash
-# 运行动态内存评估
+# Run dynamic memory evaluation
 python src/bootstrap.py evaluation/dynamic_memory_evaluation/locomo_eval.py
 
-# 运行带数据集参数的评估
+# Run evaluation with dataset argument
 python src/bootstrap.py evaluation/dynamic_memory_evaluation/locomo_eval.py --dataset small
 ```
 
-### 3. 运行算法调试脚本
+### 3. Run Algorithm Debugging Scripts
 
 ```bash
-# 运行算法调试脚本
+# Run algorithm debugging script
 python src/bootstrap.py tests/algorithms/debug_my_model.py
 
-# 运行带配置文件的脚本
+# Run script with config file
 python src/bootstrap.py tests/algorithms/debug_my_model.py --config config.json
 ```
 
-### 4. 运行测试模板
+### 4. Run Test Template
 
 ```bash
-# 运行 Bootstrap 测试模板，学习如何使用 DI 和 MongoDB
+# Run Bootstrap test template to learn how to use DI and MongoDB
 python src/bootstrap.py tests/bootstrap_test_template.py
 ```
 
-## 命令行选项
+## Command Line Options
 
 ### `--env-file`
-指定要加载的环境变量文件（默认: `.env`）
+Specify the environment variable file to load (default: `.env`)
 
 ```bash
 python src/bootstrap.py your_script.py --env-file .env.test
 ```
 
 ### `--mock`
-启用 Mock 模式（用于测试和开发）
+Enable Mock mode (for testing and development)
 
 ```bash
 python src/bootstrap.py your_script.py --mock
 ```
 
-## 环境变量
+## Environment Variables
 
 ### `MOCK_MODE`
-设置为 `true` 启用 Mock 模式
+Set to `true` to enable Mock mode
 
 ```bash
 MOCK_MODE=true python src/bootstrap.py your_script.py
 ```
 
-## 测试模板
+## Test Template
 
-项目提供了一个完整的测试模板 `tests/bootstrap_test_template.py`，展示了如何：
+The project provides a complete test template `tests/bootstrap_test_template.py` that demonstrates how to:
 
-- **使用依赖注入**：通过 `get_bean_by_type()` 和 `get_bean()` 获取单例对象
-- **操作 MongoDB**：使用仓库模式进行数据库查询和操作
-- **集成测试**：结合多个组件进行综合测试
+- **Use dependency injection**: Get singleton objects via `get_bean_by_type()` and `get_bean()`
+- **Work with MongoDB**: Use the repository pattern for database queries and operations
+- **Integration testing**: Combine multiple components for comprehensive testing
 
-模板包含以下示例：
+The template includes examples like:
 ```python
-# 获取 MongoDB 仓库
+# Get MongoDB repository
 from core.di.utils import get_bean_by_type
 repo = get_bean_by_type(MemCellRawRepository)
 
-# 查询数据
+# Query data
 memcells = await repo.find_all(limit=5)
 total_count = await repo.count_all()
 ```
 
-## 最佳实践
+## Best Practices
 
-### 1. 日常使用
-直接运行您的脚本：
+### 1. Daily Usage
+Run your scripts directly:
 ```bash
-python src/bootstrap.py 你的脚本.py
+python src/bootstrap.py your_script.py
 ```
 
-### 2. 学习开发
-先运行测试模板了解项目结构：
+### 2. Learning Development
+Start by running the test template to understand the project structure:
 ```bash
 python src/bootstrap.py tests/bootstrap_test_template.py
 ```
 
-### 3. 开发和测试
-开发时可以使用 Mock 模式：
+### 3. Development and Testing
+Use Mock mode during development:
 ```bash
 python src/bootstrap.py your_script.py --mock
 ```
 
-### 4. CI/CD 集成
-在持续集成中可以指定不同的环境文件：
+### 4. CI/CD Integration
+Specify different environment files in continuous integration:
 ```bash
 python src/bootstrap.py test_script.py --env-file .env.ci
 ```
 
-## 故障排除
+## Troubleshooting
 
-### 1. 相对导入错误
-如果遇到 `ImportError: attempted relative import with no known parent package` 错误：
-- Bootstrap 会自动检测并切换到模块模式运行
-- 无需手动干预，脚本会自动重试
+### 1. Relative Import Errors
+If you encounter `ImportError: attempted relative import with no known parent package` error:
+- Bootstrap will automatically detect and switch to module mode
+- No manual intervention needed, the script will automatically retry
 
-### 2. 导入错误
-如果遇到其他模块导入错误，检查：
-- 是否在项目根目录执行
-- `.env` 文件是否存在且配置正确
+### 2. Import Errors
+If you encounter other module import errors, check:
+- Whether you're executing from the project root directory
+- Whether the `.env` file exists and is configured correctly
 
-### 3. 脚本执行错误
-如果目标脚本执行失败：
-- 检查脚本路径是否正确
-- 确认脚本本身没有语法错误
+### 3. Script Execution Errors
+If the target script fails to execute:
+- Check if the script path is correct
+- Confirm the script itself has no syntax errors
+

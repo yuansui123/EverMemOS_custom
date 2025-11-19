@@ -1,32 +1,107 @@
-# API 使用指南
+# API Usage Guide
 
-本文档详细介绍如何使用 MemSys 的 API 接口来存储和检索记忆数据。
+This document provides detailed instructions on how to use MemSys API interfaces to store and retrieve memory data.
 
-## 📋 目录
+## 📋 Table of Contents
 
-- [API 概览](#api-概览)
-- [Memorize API 接口](#memorize-api-接口)
-- [群聊数据格式](#群聊数据格式)
-- [使用脚本存储记忆](#使用脚本存储记忆)
-- [API 调用示例](#api-调用示例)
+- [API Overview](#api-overview)
+- [Memory Storage APIs](#memory-storage-apis)
+  - [V3 Agentic API](#v3-agentic-api)
+  - [V1 Memory API](#v1-memory-api)
+  - [API Selection Guide](#api-selection-guide)
+- [Group Chat Data Format](#group-chat-data-format)
+- [Using Scripts to Store Memories](#using-scripts-to-store-memories)
+- [API Call Examples](#api-call-examples)
 
-## 🔍 API 概览
+## 🔍 API Overview
 
-MemSys 提供标准化的 API 接口：
+MemSys provides two standardized API interfaces for storing memories:
 
-- **Memorize API**: 简单直接的单条消息格式，适合逐条处理
+### Available APIs
 
-## 🚀 Memorize API 接口
+| API Type | Endpoint | Features | Recommended Use Case |
+|---------|---------|------|---------|
+| **V3 Agentic API** | `/api/v3/agentic/memorize` | Memory Storage + Intelligent Retrieval | Complete application scenarios requiring retrieval features |
+| **V1 Memory API** | `/api/v1/memories` | Pure Memory Storage | Simple scenarios requiring only storage functionality |
 
-### 接口地址
+### API Comparison
+
+| Feature | V3 Agentic API | V1 Memory API |
+|-----|---------------|--------------|
+| Store Single Message | ✅ Supported | ✅ Supported |
+| Message Format | Simple direct single message format | Simple direct single message format |
+| Intelligent Retrieval | ✅ Supported (Lightweight + Agentic) | ❌ Not Supported |
+| Session Metadata Management | ✅ Supported | ✅ Supported (with PATCH updates) |
+| Use Case | Complete memory system (storage + retrieval) | Pure memory storage system |
+
+**Important Note**: Both APIs use identical storage formats, so you can choose based on your needs. If you need retrieval functionality, we recommend using V3 Agentic API for complete feature support.
+
+---
+
+## 🚀 Memory Storage APIs
+
+### V3 Agentic API
+
+Recommended for scenarios requiring complete functionality (storage + retrieval).
+
+#### Endpoint
 
 ```
 POST /api/v3/agentic/memorize
 ```
 
-### 请求格式
+#### Features
 
-使用简单直接的单条消息格式：
+- ✅ Simple direct single message format
+- ✅ Supports lightweight retrieval (RRF fusion)
+- ✅ Supports Agentic intelligent retrieval (LLM-assisted)
+- ✅ Supports session metadata management
+
+For detailed documentation, see: [Agentic V3 API Documentation](../api_docs/agentic_v3_api.md)
+
+---
+
+### V1 Memory API
+
+Recommended for simple scenarios requiring only storage functionality.
+
+#### Endpoint
+
+```
+POST /api/v1/memories
+```
+
+#### Features
+
+- ✅ Simple direct single message format
+- ✅ Focused on memory storage
+- ✅ Supports session metadata management (with PATCH partial updates)
+
+For detailed documentation, see: [Memory API Documentation](../api_docs/memory_api.md)
+
+---
+
+### API Selection Guide
+
+**Use V3 Agentic API (`/api/v3/agentic/memorize`)** if:
+- ✅ You need intelligent retrieval functionality
+- ✅ You need to build a complete memory system (storage + retrieval)
+- ✅ You want to use lightweight or Agentic retrieval modes
+
+**Use V1 Memory API (`/api/v1/memories`)** if:
+- ✅ You only need to store memories without retrieval
+- ✅ You have your own retrieval solution
+- ✅ You prefer a more concise dedicated storage interface
+
+**Note**: Both APIs use identical data formats and underlying storage mechanisms. The main difference is that V3 API provides additional retrieval functionality.
+
+---
+
+## 📝 Memorize API Details
+
+### Request Format (Common to Both APIs)
+
+Both APIs use the same simple direct single message format:
 
 ```json
 {
@@ -34,27 +109,27 @@ POST /api/v3/agentic/memorize
   "create_time": "2025-02-01T10:00:00+08:00",
   "sender": "user_103",
   "sender_name": "Chen",
-  "content": "消息内容",
+  "content": "Message content",
   "refer_list": [],
   "group_id": "group_001",
-  "group_name": "项目讨论组"
+  "group_name": "Project Discussion Group"
 }
 ```
 
-### 字段说明
+### Field Descriptions
 
-| 字段 | 类型 | 必需 | 说明 |
+| Field | Type | Required | Description |
 |------|------|------|------|
-| `message_id` | string | 是 | 消息唯一标识符 |
-| `create_time` | string | 是 | 消息创建时间（ISO 8601 格式） |
-| `sender` | string | 是 | 发送者 ID |
-| `sender_name` | string | 否 | 发送者名称（便于阅读） |
-| `content` | string | 是 | 消息内容 |
-| `refer_list` | array | 否 | 引用的消息列表 |
-| `group_id` | string | 否 | 群组 ID |
-| `group_name` | string | 否 | 群组名称 |
+| `message_id` | string | Yes | Unique message identifier |
+| `create_time` | string | Yes | Message creation time (ISO 8601 format) |
+| `sender` | string | Yes | Sender ID |
+| `sender_name` | string | No | Sender name (for readability) |
+| `content` | string | Yes | Message content |
+| `refer_list` | array | No | List of referenced messages |
+| `group_id` | string | No | Group ID |
+| `group_name` | string | No | Group name |
 
-### 响应格式
+### Response Format
 
 ```json
 {
@@ -66,16 +141,20 @@ POST /api/v3/agentic/memorize
       {
         "memory_id": "mem_001",
         "type": "episode",
-        "content": "提取的记忆内容"
+        "content": "Extracted memory content"
       }
     ]
   }
 }
 ```
 
-### 调用示例
+### Call Examples
+
+The following examples show how to call both APIs. The request format is identical, only the URL differs.
 
 #### cURL
+
+**Using V3 Agentic API:**
 
 ```bash
 curl -X POST http://localhost:1995/api/v3/agentic/memorize \
@@ -85,19 +164,37 @@ curl -X POST http://localhost:1995/api/v3/agentic/memorize \
     "create_time": "2025-02-01T10:00:00+08:00",
     "sender": "user_103",
     "sender_name": "Chen",
-    "content": "我们需要在本周完成产品设计",
+    "content": "We need to complete the product design this week",
     "group_id": "group_001",
-    "group_name": "项目讨论组"
+    "group_name": "Project Discussion Group"
+  }'
+```
+
+**Using V1 Memory API:**
+
+```bash
+curl -X POST http://localhost:1995/api/v1/memories \
+  -H "Content-Type: application/json" \
+  -d '{
+    "message_id": "msg_001",
+    "create_time": "2025-02-01T10:00:00+08:00",
+    "sender": "user_103",
+    "sender_name": "Chen",
+    "content": "We need to complete the product design this week",
+    "group_id": "group_001",
+    "group_name": "Project Discussion Group"
   }'
 ```
 
 #### Python
 
+**Using V3 Agentic API:**
+
 ```python
 import httpx
 import asyncio
 
-async def store_memory():
+async def store_memory_v3():
     async with httpx.AsyncClient() as client:
         response = await client.post(
             "http://localhost:1995/api/v3/agentic/memorize",
@@ -106,17 +203,44 @@ async def store_memory():
                 "create_time": "2025-02-01T10:00:00+08:00",
                 "sender": "user_103",
                 "sender_name": "Chen",
-                "content": "我们需要在本周完成产品设计",
+                "content": "We need to complete the product design this week",
                 "group_id": "group_001",
-                "group_name": "项目讨论组"
+                "group_name": "Project Discussion Group"
             }
         )
         print(response.json())
 
-asyncio.run(store_memory())
+asyncio.run(store_memory_v3())
+```
+
+**Using V1 Memory API:**
+
+```python
+import httpx
+import asyncio
+
+async def store_memory_v1():
+    async with httpx.AsyncClient() as client:
+        response = await client.post(
+            "http://localhost:1995/api/v1/memories",
+            json={
+                "message_id": "msg_001",
+                "create_time": "2025-02-01T10:00:00+08:00",
+                "sender": "user_103",
+                "sender_name": "Chen",
+                "content": "We need to complete the product design this week",
+                "group_id": "group_001",
+                "group_name": "Project Discussion Group"
+            }
+        )
+        print(response.json())
+
+asyncio.run(store_memory_v1())
 ```
 
 #### JavaScript
+
+**Using V3 Agentic API:**
 
 ```javascript
 fetch('http://localhost:1995/api/v3/agentic/memorize', {
@@ -129,33 +253,55 @@ fetch('http://localhost:1995/api/v3/agentic/memorize', {
     create_time: '2025-02-01T10:00:00+08:00',
     sender: 'user_103',
     sender_name: 'Chen',
-    content: '我们需要在本周完成产品设计',
+    content: 'We need to complete the product design this week',
     group_id: 'group_001',
-    group_name: '项目讨论组'
+    group_name: 'Project Discussion Group'
   })
 })
 .then(response => response.json())
 .then(data => console.log(data));
 ```
 
-## 📁 群聊数据格式
+**Using V1 Memory API:**
 
-MemSys 定义了标准化的群聊数据格式 `GroupChatFormat`，用于存储和交换群聊对话数据。
+```javascript
+fetch('http://localhost:1995/api/v1/memories', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json'
+  },
+  body: JSON.stringify({
+    message_id: 'msg_001',
+    create_time: '2025-02-01T10:00:00+08:00',
+    sender: 'user_103',
+    sender_name: 'Chen',
+    content: 'We need to complete the product design this week',
+    group_id: 'group_001',
+    group_name: 'Project Discussion Group'
+  })
+})
+.then(response => response.json())
+.then(data => console.log(data));
+```
 
-### 格式概览
+## 📁 Group Chat Data Format
+
+MemSys defines a standardized group chat data format `GroupChatFormat` for storing and exchanging group chat conversation data.
+
+### Format Overview
 
 ```json
 {
   "version": "1.0.0",
   "conversation_meta": {
     "group_id": "group_001",
-    "name": "项目讨论组",
+    "name": "Project Discussion Group",
     "default_timezone": "+08:00",
     "user_details": {
       "user_101": {
         "full_name": "Alex",
-        "role": "技术负责人",
-        "department": "技术部"
+        "role": "Technical Lead",
+        "department": "Engineering"
       }
     }
   },
@@ -166,48 +312,50 @@ MemSys 定义了标准化的群聊数据格式 `GroupChatFormat`，用于存储�
       "sender": "user_101",
       "sender_name": "Alex",
       "type": "text",
-      "content": "大家早上好",
+      "content": "Good morning everyone",
       "refer_list": []
     }
   ]
 }
 ```
 
-### 核心特性
+### Core Features
 
-1. **分离的元信息和消息列表**
-   - `conversation_meta`: 群聊元信息
-   - `conversation_list`: 消息列表
+1. **Separated Metadata and Message List**
+   - `conversation_meta`: Group chat metadata
+   - `conversation_list`: Message list
 
-2. **集中的用户详细信息**
-   - 所有用户信息存储在 `user_details` 中
-   - 消息中只需引用用户 ID
+2. **Centralized User Details**
+   - All user information stored in `user_details`
+   - Messages only need to reference user IDs
 
-3. **时区感知的时间戳**
-   - 使用 ISO 8601 格式
-   - 支持时区信息
+3. **Timezone-aware Timestamps**
+   - Uses ISO 8601 format
+   - Supports timezone information
 
-4. **灵活的消息引用**
-   - 支持字符串引用（仅 message_id）
-   - 支持对象引用（包含完整消息信息）
+4. **Flexible Message References**
+   - Supports string references (message_id only)
+   - Supports object references (complete message information)
 
-### 详细文档
+### Detailed Documentation
 
-完整的格式说明请参考：[群聊格式规范](../../data_format/group_chat/group_chat_format.md)
+For complete format specification, see: [Group Chat Format Specification](../../data_format/group_chat/group_chat_format.md)
 
-## 🔧 使用脚本存储记忆
+## 🔧 Using Scripts to Store Memories
 
-MemSys 提供了 `run_memorize.py` 脚本，可以批量将群聊数据存储到系统中。
+MemSys provides the `run_memorize.py` script for batch storing group chat data into the system. The script supports both API interfaces.
 
-### 脚本位置
+### Script Location
 
 ```
 src/run_memorize.py
 ```
 
-### 基本用法
+### Basic Usage
 
-使用 Bootstrap 脚本运行：
+Run using the Bootstrap script, choose between V3 or V1 API:
+
+**Using V3 Agentic API (Recommended, supports retrieval):**
 
 ```bash
 uv run python src/bootstrap.py src/run_memorize.py \
@@ -215,38 +363,62 @@ uv run python src/bootstrap.py src/run_memorize.py \
   --api-url http://localhost:1995/api/v3/agentic/memorize
 ```
 
-### 命令行参数
-
-| 参数 | 必需 | 说明 |
-|------|------|------|
-| `--input` | 是 | 输入的群聊 JSON 文件路径（GroupChatFormat 格式） |
-| `--api-url` | 否* | memorize API 地址（*除非使用 --validate-only） |
-| `--validate-only` | 否 | 仅验证输入文件格式，不执行存储 |
-
-### 使用示例
-
-#### 1. 存储记忆
+**Using V1 Memory API (Storage only):**
 
 ```bash
-# 基本用法
+uv run python src/bootstrap.py src/run_memorize.py \
+  --input data/group_chat.json \
+  --api-url http://localhost:1995/api/v1/memories
+```
+
+### Command Line Arguments
+
+| Argument | Required | Description |
+|------|------|------|
+| `--input` | Yes | Input group chat JSON file path (GroupChatFormat) |
+| `--api-url` | No* | Memorize API address (*unless using --validate-only) |
+| `--validate-only` | No | Only validate input file format without storing |
+
+### Usage Examples
+
+#### 1. Store Memories
+
+**Using V3 Agentic API:**
+
+```bash
+# Basic usage
 uv run python src/bootstrap.py src/run_memorize.py \
   --input data/group_chat.json \
   --api-url http://localhost:1995/api/v3/agentic/memorize
 
-# 使用相对路径
+# Using relative path
 uv run python src/bootstrap.py src/run_memorize.py \
   --input ../my_data/chat_history.json \
   --api-url http://localhost:1995/api/v3/agentic/memorize
 
-# 指定远程服务器
+# Specifying remote server
 uv run python src/bootstrap.py src/run_memorize.py \
   --input data/group_chat.json \
   --api-url http://api.example.com/api/v3/agentic/memorize
 ```
 
-#### 2. 验证文件格式
+**Using V1 Memory API:**
 
-在存储前验证文件格式是否正确：
+```bash
+# Basic usage
+uv run python src/bootstrap.py src/run_memorize.py \
+  --input data/group_chat.json \
+  --api-url http://localhost:1995/api/v1/memories
+
+# Using relative path
+uv run python src/bootstrap.py src/run_memorize.py \
+  --input ../my_data/chat_history.json \
+  --api-url http://localhost:1995/api/v1/memories
+```
+
+#### 2. Validate File Format
+
+Validate file format before storing:
 
 ```bash
 uv run python src/bootstrap.py src/run_memorize.py \
@@ -254,96 +426,96 @@ uv run python src/bootstrap.py src/run_memorize.py \
   --validate-only
 ```
 
-### 脚本工作流程
+### Script Workflow
 
-1. **验证输入文件**
-   - 检查 JSON 格式是否正确
-   - 验证是否符合 GroupChatFormat 规范
-   - 输出数据统计信息
+1. **Validate Input File**
+   - Check if JSON format is correct
+   - Verify compliance with GroupChatFormat specification
+   - Output data statistics
 
-2. **逐条处理消息**
-   - 从群聊文件中读取每条消息
-   - 逐条调用 API 存储
-   - 显示处理进度和结果
+2. **Process Messages One by One**
+   - Read each message from group chat file
+   - Call API to store each message
+   - Display processing progress and results
 
-3. **输出处理结果**
-   - 成功处理的消息数量
-   - 保存的记忆数量
-   - 失败的消息（如有）
+3. **Output Processing Results**
+   - Number of successfully processed messages
+   - Number of saved memories
+   - Failed messages (if any)
 
-### 输出示例
+### Output Example
 
 ```
-🚀 群聊记忆存储脚本
+🚀 Group Chat Memory Storage Script
 ======================================================================
-📄 输入文件: /path/to/data/group_chat.json
-🔍 验证模式: 否
-🌐 API地址: http://localhost:1995/api/v3/agentic/memorize
+📄 Input File: /path/to/data/group_chat.json
+🔍 Validation Mode: No
+🌐 API Address: http://localhost:1995/api/v3/agentic/memorize
 ======================================================================
 
 ======================================================================
-验证输入文件格式
+Validating Input File Format
 ======================================================================
-正在读取文件: /path/to/data/group_chat.json
-正在验证 GroupChatFormat 格式...
-✓ 格式验证通过！
+Reading file: /path/to/data/group_chat.json
+Validating GroupChatFormat...
+✓ Format validation passed!
 
-=== 数据统计 ===
-格式版本: 1.0.0
-群聊名称: 项目讨论组
-群聊ID: group_001
-用户数量: 5
-消息数量: 20
-时间范围: 2025-02-01T10:00:00+08:00 ~ 2025-02-01T18:30:00+08:00
+=== Data Statistics ===
+Format Version: 1.0.0
+Group Name: Project Discussion Group
+Group ID: group_001
+User Count: 5
+Message Count: 20
+Time Range: 2025-02-01T10:00:00+08:00 ~ 2025-02-01T18:30:00+08:00
 
 ======================================================================
-开始逐条调用 memorize API
+Starting to Call Memorize API for Each Message
 ======================================================================
-群组名称: 项目讨论组
-群组ID: group_001
-消息数量: 20
-API地址: http://localhost:1995/api/v3/agentic/memorize
+Group Name: Project Discussion Group
+Group ID: group_001
+Message Count: 20
+API Address: http://localhost:1995/api/v3/agentic/memorize
 
---- 处理第 1/20 条消息 ---
-  ✓ 成功保存 2 条记忆
+--- Processing Message 1/20 ---
+  ✓ Successfully saved 2 memories
 
---- 处理第 2/20 条消息 ---
-  ✓ 成功保存 1 条记忆
+--- Processing Message 2/20 ---
+  ✓ Successfully saved 1 memory
 
 ...
 
 ======================================================================
-处理完成
+Processing Complete
 ======================================================================
-✓ 成功处理: 20/20 条消息
-✓ 共保存: 35 条记忆
+✓ Successfully Processed: 20/20 messages
+✓ Total Saved: 35 memories
 ```
 
-## 📝 API 调用示例
+## 📝 API Call Examples
 
-### 完整的工作流程
+### Complete Workflow
 
-#### 1. 准备数据文件
+#### 1. Prepare Data File
 
-创建符合 GroupChatFormat 的 JSON 文件：
+Create a JSON file conforming to GroupChatFormat:
 
 ```json
 {
   "version": "1.0.0",
   "conversation_meta": {
     "group_id": "project_team_001",
-    "name": "产品开发团队",
+    "name": "Product Development Team",
     "default_timezone": "+08:00",
     "user_details": {
       "alice": {
         "full_name": "Alice Wang",
-        "role": "产品经理",
-        "department": "产品部"
+        "role": "Product Manager",
+        "department": "Product"
       },
       "bob": {
         "full_name": "Bob Chen",
-        "role": "技术负责人",
-        "department": "技术部"
+        "role": "Technical Lead",
+        "department": "Engineering"
       }
     }
   },
@@ -354,7 +526,7 @@ API地址: http://localhost:1995/api/v3/agentic/memorize
       "sender": "alice",
       "sender_name": "Alice Wang",
       "type": "text",
-      "content": "早上好！今天我们讨论一下新功能的需求",
+      "content": "Good morning! Let's discuss the new feature requirements today",
       "refer_list": []
     },
     {
@@ -363,16 +535,16 @@ API地址: http://localhost:1995/api/v3/agentic/memorize
       "sender": "bob",
       "sender_name": "Bob Chen",
       "type": "text",
-      "content": "好的，我准备了一些技术方案",
+      "content": "Sure, I've prepared some technical solutions",
       "refer_list": ["msg_20250201_001"]
     }
   ]
 }
 ```
 
-保存为 `my_chat_data.json`。
+Save as `my_chat_data.json`.
 
-#### 2. 验证文件格式
+#### 2. Validate File Format
 
 ```bash
 uv run python src/bootstrap.py src/run_memorize.py \
@@ -380,17 +552,19 @@ uv run python src/bootstrap.py src/run_memorize.py \
   --validate-only
 ```
 
-#### 3. 启动服务
+#### 3. Start Service
 
-确保 MemSys 服务正在运行：
+Ensure MemSys service is running:
 
 ```bash
 uv run python src/run.py
 ```
 
-服务启动后，访问 http://localhost:1995/docs 验证 API 文档可访问。
+After service starts, visit http://localhost:1995/docs to verify API documentation is accessible.
 
-#### 4. 存储记忆
+#### 4. Store Memories
+
+**Option A: Using V3 Agentic API (Recommended)**
 
 ```bash
 uv run python src/bootstrap.py src/run_memorize.py \
@@ -398,76 +572,97 @@ uv run python src/bootstrap.py src/run_memorize.py \
   --api-url http://localhost:1995/api/v3/agentic/memorize
 ```
 
-#### 5. 验证存储结果
+**Option B: Using V1 Memory API**
 
-通过 API 查询已存储的记忆（具体查询 API 请参考 [Agentic V3 API 文档](../api_docs/agentic_v3_api.md)）。
-
-### 错误处理
-
-#### 格式验证失败
-
-```
-✗ 格式验证失败！
-请确保输入文件符合 GroupChatFormat 规范
+```bash
+uv run python src/bootstrap.py src/run_memorize.py \
+  --input my_chat_data.json \
+  --api-url http://localhost:1995/api/v1/memories
 ```
 
-**解决方案**：
-- 检查 JSON 格式是否正确
-- 参考 [群聊格式规范](../../data_format/group_chat/group_chat_format.md)
-- 确保必需字段都已填写
+#### 5. Verify Storage Results
 
-#### API 调用失败
+If using V3 Agentic API, you can query stored memories through the retrieval interface (see [Agentic V3 API Documentation](../api_docs/agentic_v3_api.md) for specific query APIs).
 
-```
-✗ API调用失败: 500
-响应内容: {"error": "Internal server error"}
-```
+### Error Handling
 
-**解决方案**：
-- 检查服务是否正常运行
-- 查看服务日志排查问题
-- 确认 API 地址是否正确
-
-#### 连接超时
+#### Format Validation Failed
 
 ```
-✗ 处理失败: ReadTimeout
+✗ Format validation failed!
+Please ensure input file conforms to GroupChatFormat specification
 ```
 
-**解决方案**：
-- 检查网络连接
-- 确认服务地址和端口正确
-- 检查防火墙设置
+**Solution**:
+- Check if JSON format is correct
+- Refer to [Group Chat Format Specification](../../data_format/group_chat/group_chat_format.md)
+- Ensure all required fields are filled
 
-## 🔗 相关文档
+#### API Call Failed
 
-- [群聊格式规范](../../data_format/group_chat/group_chat_format.md) - GroupChatFormat 详细说明
-- [Agentic API 文档](../api_docs/agentic_v3_api_zh.md) - API 完整文档
-- [快速开始指南](getting_started.md) - 环境搭建和服务启动
+```
+✗ API call failed: 500
+Response content: {"error": "Internal server error"}
+```
 
-## 💡 最佳实践
+**Solution**:
+- Check if service is running normally
+- View service logs to troubleshoot
+- Verify API address is correct
 
-1. **数据准备**
-   - 使用标准的 GroupChatFormat 格式
-   - 确保时间戳包含时区信息
-   - 为用户提供完整的详细信息
+#### Connection Timeout
 
-2. **批量处理**
-   - 对于大量消息，使用脚本逐条处理
-   - 添加适当的延迟避免服务器压力
-   - 监控处理进度和错误
+```
+✗ Processing failed: ReadTimeout
+```
 
-3. **错误恢复**
-   - 记录处理失败的消息
-   - 支持断点续传
-   - 定期验证存储结果
+**Solution**:
+- Check network connection
+- Verify service address and port are correct
+- Check firewall settings
 
-4. **性能优化**
-   - 合理设置并发数量
-   - 使用批量接口（如适用）
-   - 监控 API 响应时间
+## 🔗 Related Documentation
+
+### API Documentation
+
+- [Agentic V3 API Documentation](../api_docs/agentic_v3_api.md) - Complete V3 API documentation (storage + retrieval)
+- [Memory API Documentation](../api_docs/memory_api.md) - Complete V1 Memory API documentation (focused on storage)
+
+### Other Documentation
+
+- [Group Chat Format Specification](../../data_format/group_chat/group_chat_format.md) - Detailed GroupChatFormat specification
+- [Getting Started Guide](getting_started.md) - Environment setup and service startup
+- [Agentic Retrieval Guide](agentic_retrieval_guide.md) - Intelligent retrieval features explained
+
+## 💡 Best Practices
+
+1. **API Selection**
+   - Need intelligent retrieval features → Use V3 Agentic API
+   - Only need memory storage → Use V1 Memory API
+   - If unsure → Recommend V3 Agentic API (more complete features)
+   - Both APIs use same underlying storage, can switch anytime
+
+2. **Data Preparation**
+   - Use standard GroupChatFormat
+   - Ensure timestamps include timezone information
+   - Provide complete user details
+
+3. **Batch Processing**
+   - For large number of messages, use script to process one by one
+   - Add appropriate delays to avoid server pressure
+   - Monitor processing progress and errors
+
+4. **Error Recovery**
+   - Log failed messages
+   - Support resume from checkpoint
+   - Regularly verify storage results
+
+5. **Performance Optimization**
+   - Set reasonable concurrency levels
+   - Use batch interfaces (if available)
+   - Monitor API response times
 
 ---
 
-如有问题，请参考 [常见问题](getting_started.md#常见问题) 或提交 Issue。
+For questions, please refer to [FAQ](getting_started.md#faq) or submit an issue.
 

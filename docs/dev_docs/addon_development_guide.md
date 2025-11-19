@@ -1,14 +1,14 @@
-# 扩展开发指南
+# Addon Development Guide
 
-## 概述
+## Overview
 
-本指南介绍如何为 MemSys 开发扩展（Addon），包括环境搭建、开发流程和最佳实践。以 Enterprise 扩展为例，说明如何实现商业功能与开源功能的代码切分。
+This guide introduces how to develop addons for MemSys, including environment setup, development workflow, and best practices. Using the Enterprise addon as an example, it demonstrates how to achieve code separation between commercial and open-source features.
 
-## 快速开始（4 步启动）
+## Quick Start (4 Steps)
 
-如果你想快速启动扩展开发，只需按照以下 4 个步骤操作即可开始开发：
+If you want to quickly start addon development, just follow these 4 steps:
 
-### 1. 克隆两个仓库到同一目录
+### 1. Clone Both Repositories to the Same Directory
 
 ```bash
 mkdir -p ~/workspace && cd ~/workspace
@@ -16,83 +16,83 @@ git clone <opensource-repo-url> memsys_opensource
 git clone <enterprise-repo-url> memsys_enterprise
 ```
 
-**重要**：两个仓库必须在同一个父目录下。
+**Important**: Both repositories must be in the same parent directory.
 
-### 2. 在 opensource 创建虚拟环境并安装依赖
+### 2. Create Virtual Environment and Install Dependencies in Opensource
 
 ```bash
 cd ~/workspace/memsys_opensource
 uv sync
 ```
 
-这会在 `memsys_opensource/.venv` 目录下创建虚拟环境并安装所有依赖。
+This will create a virtual environment in the `memsys_opensource/.venv` directory and install all dependencies.
 
-### 3. 可编辑安装两个包到同一虚拟环境
+### 3. Editable Install Both Packages to the Same Virtual Environment
 
-**关键**：两个包都必须安装到 **opensource 的虚拟环境**中（因为 enterprise 需要导入 opensource 的模块）。
+**Key**: Both packages must be installed into **the same virtual environment** (because enterprise needs to import opensource modules).
 
 ```bash
-# 先安装 opensource
+# First, install opensource
 cd ~/workspace/memsys_opensource
 source .venv/bin/activate
 uv pip install -e .
 
-# 再安装 enterprise 到同一个虚拟环境（重要！）
+# Then, install enterprise to the same virtual environment (Important!)
 cd ~/workspace/memsys_enterprise
 source ../memsys_opensource/.venv/bin/activate
 uv pip install -e .
 ```
 
-**为什么要这样做？**
-- Enterprise 的代码需要 `from core.xxx import xxx` 导入 opensource 的模块
-- 两个包必须在同一个 Python 环境中才能相互访问
-- Entry points 必须在同一个环境中才能被系统发现
+**Why do this?**
+- Enterprise code needs to `from core.xxx import xxx` to import opensource modules
+- Both packages must be in the same Python environment to access each other
+- Entry points must be in the same environment to be discovered by the system
 
-### 4. 启动服务
+### 4. Start the Service
 
 ```bash
 cd ~/workspace/memsys_opensource
 uv run python -m src.run
 ```
 
-如果看到以下日志，说明扩展加载成功：
+If you see the following logs, the addon loaded successfully:
 
 ```
-🔌 开始加载 addons entry points...
-  ✅ 已加载 entrypoint: core
-  ✅ 已加载 entrypoint: enterprise
-✅ Addons entry points 加载完成，共 2 个
+🔌 Starting to load addons entry points...
+  ✅ Loaded entrypoint: core
+  ✅ Loaded entrypoint: enterprise
+✅ Addons entry points loaded, total: 2
 ```
 
-现在你可以开始开发了！修改任何一个仓库的代码后，直接重启服务即可（无需重新安装）。
+Now you can start developing! After modifying code in either repository, simply restart the service (no need to reinstall).
 
 ---
 
-## 详细说明
+## Detailed Instructions
 
-下面是完整的环境准备和开发流程说明。
+Below is a complete explanation of environment setup and development workflow.
 
-## 开发环境准备
+## Development Environment Setup
 
-### 1. 克隆代码仓库
+### 1. Clone Code Repositories
 
-首先需要将 opensource 和 enterprise 两个仓库克隆到**同一个目录**下：
+First, clone both opensource and enterprise repositories to **the same directory**:
 
 ```bash
-# 创建工作目录
+# Create workspace directory
 mkdir -p ~/workspace
 cd ~/workspace
 
-# 克隆 opensource 仓库
+# Clone opensource repository
 git clone <opensource-repo-url> memsys_opensource
 
-# 克隆 enterprise 仓库
+# Clone enterprise repository
 git clone <enterprise-repo-url> memsys_enterprise
 ```
 
-**重要**：两个仓库必须放在同一个目录下，这是为了确保开发时的模块引用能够正确解析。
+**Important**: Both repositories must be in the same directory to ensure module references resolve correctly during development.
 
-最终目录结构应该是：
+The final directory structure should be:
 
 ```
 ~/workspace/
@@ -107,77 +107,77 @@ git clone <enterprise-repo-url> memsys_enterprise
     └── ...
 ```
 
-### 2. 安装 opensource 依赖
+### 2. Install Opensource Dependencies
 
-进入 opensource 仓库，使用 uv 创建虚拟环境并安装依赖：
+Enter the opensource repository and use uv to create a virtual environment and install dependencies:
 
 ```bash
 cd ~/workspace/memsys_opensource
 
-# 使用 uv 同步依赖（会自动创建虚拟环境）
+# Use uv to sync dependencies (will automatically create virtual environment)
 uv sync
 
-# 或者如果已有虚拟环境
+# Or if virtual environment already exists
 uv sync --frozen
 ```
 
-这会在 `memsys_opensource/.venv` 目录下创建虚拟环境。
+This will create a virtual environment in the `memsys_opensource/.venv` directory.
 
-### 3. 可编辑安装两个包到同一虚拟环境
+### 3. Editable Install Both Packages to the Same Virtual Environment
 
-**重要**：opensource 和 enterprise 两个包必须安装到**同一个虚拟环境**中。
+**Important**: Both opensource and enterprise packages must be installed into **the same virtual environment**.
 
 ```bash
-# 第一步：在 opensource 仓库根目录，安装 opensource
+# Step 1: In opensource repository root, install opensource
 cd ~/workspace/memsys_opensource
 uv pip install -e .
 
-# 第二步：在 enterprise 仓库根目录，将 enterprise 也安装到 opensource 的虚拟环境
+# Step 2: In enterprise repository root, also install enterprise to opensource's virtual environment
 cd ~/workspace/memsys_enterprise
 
-# 方式 1：使用 pip 直接安装（推荐）
+# Method 1: Use pip directly (recommended)
 ../memsys_opensource/.venv/bin/pip install -e .
 
-# 方式 2：使用 uv 指定 Python 解释器
+# Method 2: Use uv specifying Python interpreter
 uv pip install -e . --python ../memsys_opensource/.venv/bin/python
 
-# 方式 3：先激活 opensource 的虚拟环境再安装
+# Method 3: Activate opensource virtual environment first, then install
 source ../memsys_opensource/.venv/bin/activate  # Linux/macOS
 pip install -e .
 ```
 
-**为什么必须在同一个虚拟环境中？**
-- Enterprise 的代码需要 `from core.xxx import xxx` 导入 opensource 的模块
-- 如果安装在不同的虚拟环境，enterprise 将无法找到 core 模块
-- 两个包共享依赖，避免重复安装
-- Entry points 必须在同一个环境中才能被正确发现
+**Why must they be in the same virtual environment?**
+- Enterprise code needs to `from core.xxx import xxx` to import opensource modules
+- If installed in different virtual environments, enterprise cannot find the core module
+- Both packages share dependencies, avoiding duplicate installations
+- Entry points must be in the same environment to be discovered correctly
 
-**可编辑安装的作用**：
-- 代码修改后无需重新安装即可生效
-- Entry points 会被注册到环境中
-- 可以像正常安装的包一样导入
+**Purpose of editable install**:
+- Code changes take effect without reinstallation
+- Entry points are registered in the environment
+- Can import like normally installed packages
 
-### 4. 验证安装
+### 4. Verify Installation
 
-验证两个包是否正确安装到同一个虚拟环境中：
+Verify both packages are correctly installed in the same virtual environment:
 
 ```bash
-# 在 opensource 目录下检查已安装的包
+# Check installed packages in opensource directory
 cd ~/workspace/memsys_opensource
 uv pip list | grep memsys
 
-# 应该看到类似输出（注意都显示为可编辑安装）：
+# Should see similar output (note both show as editable installs):
 # memsys            0.1.0   /path/to/memsys_opensource/src
 # memsys-enterprise 0.1.0   /path/to/memsys_enterprise/src/memsys_enterprise
 ```
 
-验证 entry points 是否注册：
+Verify entry points are registered:
 
 ```bash
-# 使用 opensource 的 Python 环境
+# Use opensource Python environment
 cd ~/workspace/memsys_opensource
 
-# 方式 1：使用 uv run
+# Method 1: Use uv run
 uv run python -c "
 from importlib.metadata import entry_points
 eps = entry_points(group='memsys.addons')
@@ -185,7 +185,7 @@ for ep in eps:
     print(f'{ep.name}: {ep.value}')
 "
 
-# 方式 2：激活虚拟环境后运行
+# Method 2: Run after activating virtual environment
 source .venv/bin/activate
 python -c "
 from importlib.metadata import entry_points
@@ -194,85 +194,85 @@ for ep in eps:
     print(f'{ep.name}: {ep.value}')
 "
 
-# 应该看到输出：
+# Should see output:
 # core: src.addon
 # enterprise: memsys_enterprise.addon
 ```
 
-**如果没看到 enterprise**：说明 enterprise 没有安装到正确的虚拟环境中，请重新执行步骤 3。
+**If you don't see enterprise**: Enterprise is not installed in the correct virtual environment, please repeat step 3.
 
-### 5. 启动服务
+### 5. Start the Service
 
-通过 opensource 仓库启动服务，将会自动加载 enterprise 扩展：
+Start the service through the opensource repository, which will automatically load the enterprise addon:
 
 ```bash
 cd ~/workspace/memsys_opensource
 
-# 方式 1：使用 uv run（推荐）
+# Method 1: Use uv run (recommended)
 uv run python -m src.run
 
-# 方式 2：激活虚拟环境后运行
+# Method 2: Run after activating virtual environment
 source .venv/bin/activate  # Linux/macOS
-# 或 .venv\Scripts\activate  # Windows
+# or .venv\Scripts\activate  # Windows
 python -m src.run
 
-# 方式 3：使用 project.scripts 定义的命令
+# Method 3: Use command defined in project.scripts
 uv run web
 ```
 
-启动后，在日志中应该能看到类似输出：
+After startup, you should see similar output in the logs:
 
 ```
-🔌 开始加载 addons entry points...
-  ✅ 已加载 entrypoint: core
-  ✅ 已加载 entrypoint: enterprise
-✅ Addons entry points 加载完成，共 2 个
+🔌 Starting to load addons entry points...
+  ✅ Loaded entrypoint: core
+  ✅ Loaded entrypoint: enterprise
+✅ Addons entry points loaded, total: 2
 ```
 
-## 扩展开发原理
+## Addon Development Principles
 
-### 核心思想
+### Core Concept
 
-扩展本质上**不是**依赖关系，而是 Open Core 的一部分代码。扩展的目录结构和 Open Core 的目录结构完全一致，它们是**同一个系统的不同部分**。
+Addons are essentially **not** dependencies, but part of the Open Core codebase. The directory structure of addons is completely consistent with the Open Core directory structure - they are **different parts of the same system**.
 
-### 关键机制
+### Key Mechanisms
 
-1. **接口抽象**：通过抽象类或协议定义接口
-2. **分头实现**：在不同仓库中提供不同实现
-3. **自动替换**：通过优先级机制，addon 的实现自动覆盖 open core 的实现
+1. **Interface Abstraction**: Define interfaces through abstract classes or protocols
+2. **Separate Implementation**: Provide different implementations in different repositories
+3. **Automatic Replacement**: Through priority mechanism, addon implementations automatically override open core implementations
 
-### 工作流程
+### Workflow
 
 ```
 ┌─────────────────┐
-│  定义接口抽象    │
-│  (Open Core)    │
+│ Define Interface│
+│   (Open Core)   │
 └────────┬────────┘
          │
     ┌────┴────┐
     │         │
     ▼         ▼
-┌───────┐  ┌───────────┐
-│开源实现│  │  商业实现  │
-│(Core) │  │(Enterprise)│
-└───────┘  └───────────┘
+┌───────┐  ┌─────────────┐
+│  Open │  │  Commercial │
+│ Source│  │(Enterprise) │
+└───────┘  └─────────────┘
     │         │
     └────┬────┘
          │
          ▼
    ┌─────────┐
-   │优先级机制│
-   │自动替换  │
+   │Priority │
+   │Mechanism│
    └─────────┘
 ```
 
-## 开发扩展的步骤
+## Steps to Develop an Addon
 
-### 步骤 1：接口抽象
+### Step 1: Interface Abstraction
 
-当你需要对某一个功能或逻辑进行区分时，首先要进行接口抽象。
+When you need to differentiate a feature or logic, first perform interface abstraction.
 
-**在 Open Core 中定义接口**：
+**Define interface in Open Core**:
 
 ```python
 # memsys_opensource/src/core/interface/repository/memory_repository.py
@@ -282,54 +282,54 @@ from core.domain.model.memory import Memory
 
 class MemoryRepository(ABC):
     """
-    记忆存储仓库接口
-    定义记忆的 CRUD 操作规范
+    Memory Storage Repository Interface
+    Defines CRUD operation specifications for memories
     """
     
     @abstractmethod
     async def save(self, memory: Memory) -> str:
         """
-        保存记忆
+        Save memory
         
         Args:
-            memory: 记忆对象
+            memory: Memory object
             
         Returns:
-            str: 记忆ID
+            str: Memory ID
         """
         pass
     
     @abstractmethod
     async def find_by_id(self, memory_id: str) -> Optional[Memory]:
         """
-        根据ID查找记忆
+        Find memory by ID
         
         Args:
-            memory_id: 记忆ID
+            memory_id: Memory ID
             
         Returns:
-            Optional[Memory]: 记忆对象，不存在则返回 None
+            Optional[Memory]: Memory object, None if not found
         """
         pass
     
     @abstractmethod
     async def search(self, query: str, limit: int = 10) -> List[Memory]:
         """
-        搜索记忆
+        Search memories
         
         Args:
-            query: 查询文本
-            limit: 返回结果数量限制
+            query: Query text
+            limit: Limit on number of results
             
         Returns:
-            List[Memory]: 记忆列表
+            List[Memory]: List of memories
         """
         pass
 ```
 
-### 步骤 2：Open Core 实现
+### Step 2: Open Core Implementation
 
-在 Open Core 中提供基础实现（通常是简化版或本地版）。
+Provide a basic implementation in Open Core (usually simplified or local version).
 
 ```python
 # memsys_opensource/src/infra_layer/adapters/out/persistence/repository/local_memory_repository.py
@@ -341,25 +341,25 @@ from core.di.component import Component
 @Component()
 class LocalMemoryRepository(MemoryRepository):
     """
-    本地内存存储实现（用于开发和测试）
-    数据存储在内存中，服务重启后丢失
+    Local in-memory storage implementation (for development and testing)
+    Data is stored in memory and lost after service restart
     """
     
     def __init__(self):
-        self._storage = {}  # 简单的内存字典存储
+        self._storage = {}  # Simple dictionary storage
     
     async def save(self, memory: Memory) -> str:
-        """保存到内存字典"""
+        """Save to memory dictionary"""
         memory_id = memory.id or self._generate_id()
         self._storage[memory_id] = memory
         return memory_id
     
     async def find_by_id(self, memory_id: str) -> Optional[Memory]:
-        """从内存字典查找"""
+        """Find from memory dictionary"""
         return self._storage.get(memory_id)
     
     async def search(self, query: str, limit: int = 10) -> List[Memory]:
-        """简单的全文匹配搜索"""
+        """Simple full-text matching search"""
         results = []
         for memory in self._storage.values():
             if query.lower() in memory.content.lower():
@@ -369,12 +369,12 @@ class LocalMemoryRepository(MemoryRepository):
         return results
     
     def _generate_id(self) -> str:
-        """生成简单的ID"""
+        """Generate simple ID"""
         import uuid
         return str(uuid.uuid4())
 ```
 
-**在 Open Core 的 addon 中注册扫描路径**：
+**Register scan path in Open Core addon**:
 
 ```python
 # memsys_opensource/src/addon.py
@@ -383,9 +383,9 @@ paths_registry.add_scan_path(
 )
 ```
 
-### 步骤 3：Enterprise 实现
+### Step 3: Enterprise Implementation
 
-在 Enterprise 中提供商业级实现（通常是分布式、云原生版本）。
+Provide commercial-grade implementation in Enterprise (usually distributed, cloud-native version).
 
 ```python
 # memsys_enterprise/src/memsys_enterprise/infra_layer/adapters/out/persistence/repository/cloud_memory_repository.py
@@ -397,54 +397,54 @@ from core.di.component import Component
 @Component()
 class CloudMemoryRepository(MemoryRepository):
     """
-    云端分布式存储实现
-    使用 MongoDB + Elasticsearch + Milvus 实现高可用存储和搜索
+    Cloud-based distributed storage implementation
+    Uses MongoDB + Elasticsearch + Milvus for high-availability storage and search
     """
     
     def __init__(
         self,
-        mongo_client,      # 注入 MongoDB 客户端
-        es_client,         # 注入 Elasticsearch 客户端
-        milvus_client,     # 注入 Milvus 客户端
+        mongo_client,      # Inject MongoDB client
+        es_client,         # Inject Elasticsearch client
+        milvus_client,     # Inject Milvus client
     ):
         self.mongo = mongo_client
         self.es = es_client
         self.milvus = milvus_client
     
     async def save(self, memory: Memory) -> str:
-        """保存到分布式存储"""
-        # 1. 保存到 MongoDB（主存储）
+        """Save to distributed storage"""
+        # 1. Save to MongoDB (primary storage)
         memory_id = await self._save_to_mongo(memory)
         
-        # 2. 索引到 Elasticsearch（全文搜索）
+        # 2. Index to Elasticsearch (full-text search)
         await self._index_to_elasticsearch(memory_id, memory)
         
-        # 3. 保存向量到 Milvus（向量搜索）
+        # 3. Save vectors to Milvus (vector search)
         await self._save_to_milvus(memory_id, memory)
         
         return memory_id
     
     async def find_by_id(self, memory_id: str) -> Optional[Memory]:
-        """从 MongoDB 查询"""
+        """Query from MongoDB"""
         return await self._find_from_mongo(memory_id)
     
     async def search(self, query: str, limit: int = 10) -> List[Memory]:
-        """混合搜索：向量搜索 + 全文搜索 + 重排序"""
-        # 1. 向量搜索（语义相似）
+        """Hybrid search: vector search + full-text search + reranking"""
+        # 1. Vector search (semantic similarity)
         vector_results = await self._vector_search(query, limit * 2)
         
-        # 2. 全文搜索（关键词匹配）
+        # 2. Full-text search (keyword matching)
         text_results = await self._text_search(query, limit * 2)
         
-        # 3. 混合重排序
+        # 3. Hybrid reranking
         final_results = self._rerank(vector_results, text_results, limit)
         
         return final_results
     
-    # ... 其他私有方法实现 ...
+    # ... other private method implementations ...
 ```
 
-**在 Enterprise 的 addon 中注册扫描路径**：
+**Register scan path in Enterprise addon**:
 
 ```python
 # memsys_enterprise/src/memsys_enterprise/addon.py
@@ -453,165 +453,165 @@ di_registry.add_scan_path(
 )
 ```
 
-### 步骤 4：优先级机制
+### Step 4: Priority Mechanism
 
-当两个仓库都提供相同接口的实现时，后加载的 addon（Enterprise）会自动覆盖先加载的（Core）。
+When both repositories provide implementations for the same interface, the later-loaded addon (Enterprise) automatically overrides the earlier one (Core).
 
-**实现原理**：
-1. DI 容器在扫描组件时，遇到相同接口的实现会进行替换
-2. Enterprise addon 在 Core addon 之后加载
-3. `CloudMemoryRepository` 会替换 `LocalMemoryRepository`
+**Implementation principle**:
+1. The DI container replaces implementations when encountering the same interface during component scanning
+2. Enterprise addon loads after Core addon
+3. `CloudMemoryRepository` replaces `LocalMemoryRepository`
 
-**使用时无需关心具体实现**：
+**No need to care about specific implementation when using**:
 
 ```python
-# 业务层代码（在 Open Core 或 Enterprise 中都一样）
+# Business layer code (same in both Open Core and Enterprise)
 from core.interface.repository.memory_repository import MemoryRepository
 from core.di.injector import inject
 
 class MemoryService:
     def __init__(self):
-        # 自动注入，运行时决定使用哪个实现
+        # Auto-inject, runtime decides which implementation to use
         self.repository: MemoryRepository = inject(MemoryRepository)
     
     async def save_memory(self, content: str) -> str:
         memory = Memory(content=content)
-        # 开发环境：使用 LocalMemoryRepository
-        # 生产环境：使用 CloudMemoryRepository
+        # Development environment: uses LocalMemoryRepository
+        # Production environment: uses CloudMemoryRepository
         return await self.repository.save(memory)
 ```
 
-## 目录结构规范
+## Directory Structure Standards
 
-### Open Core 结构
+### Open Core Structure
 
 ```
 memsys_opensource/
 ├── src/
-│   ├── addon.py                      # Core addon 注册
-│   ├── core/                         # 核心领域层
-│   │   ├── interface/                # 接口定义（关键）
-│   │   │   ├── repository/           # 仓库接口
-│   │   │   ├── service/              # 服务接口
-│   │   │   └── controller/           # 控制器接口
-│   │   ├── domain/                   # 领域模型
-│   │   ├── di/                       # 依赖注入
-│   │   ├── addons/                   # Addon 机制
+│   ├── addon.py                      # Core addon registration
+│   ├── core/                         # Core domain layer
+│   │   ├── interface/                # Interface definitions (key)
+│   │   │   ├── repository/           # Repository interfaces
+│   │   │   ├── service/              # Service interfaces
+│   │   │   └── controller/           # Controller interfaces
+│   │   ├── domain/                   # Domain models
+│   │   ├── di/                       # Dependency injection
+│   │   ├── addons/                   # Addon mechanism
 │   │   └── ...
-│   ├── infra_layer/                  # 基础设施层
+│   ├── infra_layer/                  # Infrastructure layer
 │   │   └── adapters/
-│   │       ├── input/                # 输入适配器
-│   │       └── out/                  # 输出适配器
-│   │           └── persistence/      # 持久化实现
-│   ├── agentic_layer/                # Agent 层
-│   ├── biz_layer/                    # 业务层
-│   └── component/                    # 通用组件
+│   │       ├── input/                # Input adapters
+│   │       └── out/                  # Output adapters
+│   │           └── persistence/      # Persistence implementations
+│   ├── agentic_layer/                # Agent layer
+│   ├── biz_layer/                    # Business layer
+│   └── component/                    # Common components
 └── pyproject.toml
 ```
 
-### Enterprise 结构（镜像 Open Core）
+### Enterprise Structure (Mirrors Open Core)
 
 ```
 memsys_enterprise/
 ├── src/
 │   └── memsys_enterprise/
-│       ├── addon.py                  # Enterprise addon 注册
-│       └── infra_layer/              # 基础设施层（与 Open Core 对应）
+│       ├── addon.py                  # Enterprise addon registration
+│       └── infra_layer/              # Infrastructure layer (corresponds to Open Core)
 │           └── adapters/
-│               ├── input/            # 输入适配器（商业版实现）
-│               │   ├── api/          # 额外的 API
-│               │   └── mcp/          # 额外的协议
-│               └── out/              # 输出适配器（商业版实现）
-│                   ├── persistence/  # 分布式持久化
-│                   └── search/       # 高级搜索
+│               ├── input/            # Input adapters (commercial implementation)
+│               │   ├── api/          # Additional APIs
+│               │   └── mcp/          # Additional protocols
+│               └── out/              # Output adapters (commercial implementation)
+│                   ├── persistence/  # Distributed persistence
+│                   └── search/       # Advanced search
 └── pyproject.toml
 ```
 
-**关键原则**：
-- Enterprise 的目录结构**镜像** Open Core
-- 只包含需要替换或新增的部分
-- 保持层次结构一致，便于理解和维护
+**Key Principles**:
+- Enterprise directory structure **mirrors** Open Core
+- Only includes parts that need to be replaced or added
+- Maintains consistent hierarchy for easy understanding and maintenance
 
-## 配置 Entry Points
+## Configuring Entry Points
 
-### Open Core 配置
+### Open Core Configuration
 
 ```toml
 # memsys_opensource/pyproject.toml
 [project]
 name = "memsys"
 version = "0.1.0"
-# ... 其他配置 ...
+# ... other configurations ...
 
 [project.entry-points."memsys.addons"]
 core = "src.addon"
 ```
 
-### Enterprise 配置
+### Enterprise Configuration
 
 ```toml
 # memsys_enterprise/pyproject.toml
 [project]
 name = "memsys-enterprise"
 version = "0.1.0"
-# ... 其他配置 ...
+# ... other configurations ...
 
 [project.entry-points."memsys.addons"]
 enterprise = "memsys_enterprise.addon"
 ```
 
-**注意**：
-- Entry point group 名称必须是 `"memsys.addons"`
-- Entry point 名称（如 `core`、`enterprise`）可以自定义
-- Entry point 值指向包含注册代码的模块
+**Note**:
+- Entry point group name must be `"memsys.addons"`
+- Entry point names (like `core`, `enterprise`) can be customized
+- Entry point values point to modules containing registration code
 
-## 开发工作流
+## Development Workflow
 
-### 1. 日常开发
+### 1. Daily Development
 
 ```bash
-# 1. 修改代码（Open Core 或 Enterprise）
+# 1. Modify code (Open Core or Enterprise)
 vim memsys_opensource/src/infra_layer/...
 vim memsys_enterprise/src/memsys_enterprise/infra_layer/...
 
-# 2. 直接启动测试（无需重新安装）
+# 2. Start testing directly (no need to reinstall)
 cd memsys_opensource
 uv run python -m src.run
 
-# 3. 查看日志，确认扩展加载
-# 应该看到 "已加载 entrypoint: enterprise"
+# 3. Check logs to confirm addon loading
+# Should see "Loaded entrypoint: enterprise"
 ```
 
-### 2. 添加新的扩展功能
+### 2. Adding New Addon Features
 
 ```bash
-# 1. 在 Open Core 定义接口
+# 1. Define interface in Open Core
 vim memsys_opensource/src/core/interface/service/new_service.py
 
-# 2. 在 Open Core 提供基础实现
+# 2. Provide basic implementation in Open Core
 vim memsys_opensource/src/component/new_service_impl.py
 
-# 3. 在 Enterprise 提供商业实现
+# 3. Provide commercial implementation in Enterprise
 vim memsys_enterprise/src/memsys_enterprise/component/new_service_impl.py
 
-# 4. 确保扫描路径已配置（如果需要新路径）
+# 4. Ensure scan paths are configured (if new path needed)
 vim memsys_opensource/src/addon.py
 vim memsys_enterprise/src/memsys_enterprise/addon.py
 
-# 5. 启动测试
+# 5. Start testing
 cd memsys_opensource
 uv run python -m src.run
 ```
 
-### 3. 调试扩展加载
+### 3. Debugging Addon Loading
 
-如果发现扩展没有加载或组件没有替换，可以：
+If you find addons are not loading or components are not being replaced:
 
 ```python
-# 在代码中添加调试输出
+# Add debug output in code
 from core.addons.addons_registry import ADDONS_REGISTRY
 
-# 查看所有已加载的 addons
+# View all loaded addons
 all_addons = ADDONS_REGISTRY.get_all()
 for addon in all_addons:
     print(f"Addon: {addon.name}")
@@ -620,115 +620,115 @@ for addon in all_addons:
             print(f"  DI Path: {path}")
 ```
 
-或者设置日志级别为 DEBUG：
+Or set log level to DEBUG:
 
 ```bash
 export LOG_LEVEL=DEBUG
 uv run python -m src.run
 ```
 
-### 4. 只加载 Open Core（不加载 Enterprise）
+### 4. Load Only Open Core (Without Enterprise)
 
 ```bash
-# 设置环境变量，只加载 core addon
+# Set environment variable to load only core addon
 export MEMSYS_ENTRYPOINTS_FILTER=core
 
-# 启动服务
+# Start service
 cd memsys_opensource
 uv run python -m src.run
 
-# 此时只会加载 Open Core 的实现，不会加载 Enterprise
+# Only Open Core implementations will be loaded, not Enterprise
 ```
 
-## 最佳实践
+## Best Practices
 
-### 1. 接口先行
+### 1. Interface First
 
-- 在开发新功能前，先思考接口设计
-- 接口应该足够抽象，不包含实现细节
-- 接口定义放在 `core/interface/` 目录下
+- Think about interface design before developing new features
+- Interfaces should be abstract enough, without implementation details
+- Interface definitions go in `core/interface/` directory
 
-### 2. 保持目录结构一致
+### 2. Keep Directory Structure Consistent
 
-- Enterprise 的目录结构应该镜像 Open Core
-- 便于快速定位对应的实现
-- 降低维护成本
+- Enterprise directory structure should mirror Open Core
+- Makes it easy to quickly locate corresponding implementations
+- Reduces maintenance costs
 
-### 3. 文档和注释
+### 3. Documentation and Comments
 
-- 接口定义必须有详细的 docstring
-- 说明每个方法的用途、参数、返回值
-- 标注哪些是开源实现，哪些是商业实现
+- Interface definitions must have detailed docstrings
+- Explain the purpose, parameters, and return values of each method
+- Mark which are open-source implementations and which are commercial
 
-### 4. 测试覆盖
+### 4. Test Coverage
 
-- 为接口编写单元测试
-- 测试应该对两种实现都有效
-- 使用依赖注入，方便 mock 和测试
+- Write unit tests for interfaces
+- Tests should be valid for both implementations
+- Use dependency injection for easy mocking and testing
 
-### 5. 版本兼容
+### 5. Version Compatibility
 
-- Open Core 和 Enterprise 的接口版本应该保持同步
-- 修改接口时，同时更新两个仓库的实现
-- 使用语义化版本控制
+- Open Core and Enterprise interface versions should stay synchronized
+- When modifying interfaces, update implementations in both repositories
+- Use semantic versioning
 
-### 6. 环境隔离
+### 6. Environment Isolation
 
-- 开发环境使用 Open Core 实现
-- 测试环境使用 Enterprise 实现
-- 通过环境变量控制加载行为
+- Development environment uses Open Core implementation
+- Testing environment uses Enterprise implementation
+- Control loading behavior through environment variables
 
-## 常见问题
+## Common Issues
 
-### Q1: Enterprise 实现没有生效？
+### Q1: Enterprise implementation not taking effect?
 
-**检查项**：
-1. **确认两个包都安装到同一个虚拟环境**（最常见的问题！）
-   - 运行 `cd memsys_opensource && uv pip list | grep memsys`
-   - 应该同时看到 memsys 和 memsys-enterprise
-2. 确认两个包都进行了可编辑安装（`uv pip install -e .`）
-3. 验证 entry points 是否注册成功
-4. 检查接口名称和实现类名是否一致
-5. 确认 `@Component()` 装饰器是否添加
-6. 查看 addon 扫描路径是否包含该实现
+**Check**:
+1. **Confirm both packages are installed in the same virtual environment** (most common issue!)
+   - Run `cd memsys_opensource && uv pip list | grep memsys`
+   - Should see both memsys and memsys-enterprise
+2. Confirm both packages are editable installs (`uv pip install -e .`)
+3. Verify entry points are registered successfully
+4. Check interface name and implementation class name are consistent
+5. Confirm `@Component()` decorator is added
+6. Check addon scan paths include the implementation
 
-### Q0: 找不到 core 模块？
+### Q0: Cannot find core module?
 
-**错误信息**：`ModuleNotFoundError: No module named 'core'`
+**Error message**: `ModuleNotFoundError: No module named 'core'`
 
-**原因**：Enterprise 没有安装到 opensource 的虚拟环境中。
+**Reason**: Enterprise is not installed in the opensource virtual environment.
 
-**解决方法**：
+**Solution**:
 ```bash
-# 在 enterprise 目录下，使用 opensource 的 pip 安装
+# In enterprise directory, install using opensource pip
 cd ~/workspace/memsys_enterprise
 ../memsys_opensource/.venv/bin/pip install -e .
 
-# 验证安装
+# Verify installation
 cd ~/workspace/memsys_opensource
 uv pip list | grep memsys-enterprise
 ```
 
-### Q2: 如何调试扩展加载？
+### Q2: How to debug addon loading?
 
 ```python
-# 方法 1：查看日志
+# Method 1: Check logs
 export LOG_LEVEL=DEBUG
 uv run python -m src.run
 
-# 方法 2：在代码中打印
+# Method 2: Print in code
 from core.addons.addons_registry import ADDONS_REGISTRY
-print(f"已加载 {ADDONS_REGISTRY.count()} 个 addons")
+print(f"Loaded {ADDONS_REGISTRY.count()} addons")
 for addon in ADDONS_REGISTRY.get_all():
     print(f"  - {addon.name}")
 
-# 方法 3：使用 Python 调试器
+# Method 3: Use Python debugger
 import ipdb; ipdb.set_trace()
 ```
 
-### Q3: 可以有多个 Enterprise 扩展吗？
+### Q3: Can there be multiple Enterprise addons?
 
-可以！你可以创建多个扩展包：
+Yes! You can create multiple addon packages:
 
 ```toml
 # memsys_enterprise/pyproject.toml
@@ -740,68 +740,68 @@ enterprise = "memsys_enterprise.addon"
 plugin_xyz = "memsys_plugin_xyz.addon"
 ```
 
-所有扩展都会被加载，遵循相同的优先级机制。
+All addons will be loaded, following the same priority mechanism.
 
-### Q4: 如何在本地开发时禁用某个扩展?
+### Q4: How to disable an addon during local development?
 
-使用 `MEMSYS_ENTRYPOINTS_FILTER` 环境变量：
+Use the `MEMSYS_ENTRYPOINTS_FILTER` environment variable:
 
 ```bash
-# 只加载 core，不加载 enterprise
+# Load only core, not enterprise
 export MEMSYS_ENTRYPOINTS_FILTER=core
 
-# 加载 core 和 plugin_xyz，不加载 enterprise
+# Load core and plugin_xyz, not enterprise
 export MEMSYS_ENTRYPOINTS_FILTER=core,plugin_xyz
 ```
 
-### Q5: 两个仓库的代码如何协作开发？
+### Q5: How to collaborate on code between two repositories?
 
-建议工作流：
+Recommended workflow:
 
-1. **接口变更**：在 Open Core 中修改接口，提交 PR
-2. **实现更新**：接口合并后，分别在两个仓库更新实现
-3. **同步版本**：确保接口版本号在两个仓库中一致
-4. **集成测试**：在本地同时安装两个包进行测试
+1. **Interface changes**: Modify interfaces in Open Core, submit PR
+2. **Implementation updates**: After interfaces merge, update implementations in both repositories
+3. **Version sync**: Ensure interface version numbers are consistent in both repositories
+4. **Integration testing**: Install both packages locally for testing
 
-### Q6: 生产环境如何部署？
+### Q6: How to deploy in production?
 
 ```bash
-# 方法 1：安装发布的包
+# Method 1: Install published packages
 pip install memsys
 pip install memsys-enterprise
 
-# 方法 2：从源码安装
+# Method 2: Install from source
 pip install /path/to/memsys_opensource
 pip install /path/to/memsys_enterprise
 
-# 方法 3：使用 Docker
-# Dockerfile 中安装两个包
+# Method 3: Use Docker
+# Install both packages in Dockerfile
 RUN pip install memsys memsys-enterprise
 ```
 
-所有方法效果相同，entry points 会自动注册和加载。
+All methods have the same effect - entry points are automatically registered and loaded.
 
-## 进阶主题
+## Advanced Topics
 
-### 1. 扩展之间的依赖
+### 1. Dependencies Between Addons
 
-虽然扩展之间没有硬依赖，但可以通过接口进行协作：
+While there are no hard dependencies between addons, they can collaborate through interfaces:
 
 ```python
-# Open Core 定义两个接口
+# Open Core defines two interfaces
 class ServiceA(ABC): ...
 class ServiceB(ABC): ...
 
-# Enterprise 实现 ServiceA 时可以使用 ServiceB
+# Enterprise implementation of ServiceA can use ServiceB
 @Component()
 class EnterpriseServiceA(ServiceA):
     def __init__(self):
         self.service_b: ServiceB = inject(ServiceB)
 ```
 
-### 2. 扩展配置
+### 2. Addon Configuration
 
-可以为扩展提供专门的配置：
+You can provide dedicated configuration for addons:
 
 ```python
 # memsys_enterprise/src/memsys_enterprise/config/enterprise_config.py
@@ -815,43 +815,42 @@ class EnterpriseConfig(BaseSettings):
     class Config:
         env_prefix = "ENTERPRISE_"
 
-# 在实现中使用
+# Use in implementation
 @Component()
 class CloudMemoryRepository(MemoryRepository):
     def __init__(self):
         self.config = EnterpriseConfig()
 ```
 
-### 3. 条件性加载
+### 3. Conditional Loading
 
-根据环境或配置条件性地加载某些组件：
+Conditionally load certain components based on environment or configuration:
 
 ```python
 # memsys_enterprise/src/memsys_enterprise/addon.py
 import os
 
-# 只在生产环境加载某些路径
+# Only load certain paths in production environment
 if os.getenv("ENV") == "production":
     di_registry.add_scan_path(
         os.path.join(enterprise_base_path, "production_only")
     )
 ```
 
-## 总结
+## Summary
 
-扩展开发的核心流程：
+Core workflow for addon development:
 
-1. ✅ **环境搭建**：克隆两个仓库到同一目录，**将两个包安装到同一虚拟环境**
-2. ✅ **接口抽象**：在 Open Core 定义清晰的接口
-3. ✅ **分头实现**：在两个仓库分别实现不同版本
-4. ✅ **自动加载**：通过 Entry Points 自动发现和加载
-5. ✅ **优先级替换**：Enterprise 实现自动覆盖 Core 实现
+1. ✅ **Environment setup**: Clone both repositories to the same directory, **install both packages in the same virtual environment**
+2. ✅ **Interface abstraction**: Define clear interfaces in Open Core
+3. ✅ **Separate implementation**: Implement different versions in both repositories
+4. ✅ **Automatic loading**: Automatically discover and load through Entry Points
+5. ✅ **Priority replacement**: Enterprise implementations automatically override Core implementations
 
-这种架构实现了：
-- 代码隔离（开源和商业代码分离）
-- 无缝集成（用户无感知切换）
-- 灵活扩展（支持多个扩展包）
-- 易于维护（目录结构一致）
+This architecture achieves:
+- Code isolation (separation of open-source and commercial code)
+- Seamless integration (transparent switching for users)
+- Flexible extension (supports multiple addon packages)
+- Easy maintenance (consistent directory structure)
 
-遵循本指南，你可以快速开发和部署 MemSys 扩展，实现功能的灵活组合和商业化。
-
+Follow this guide to quickly develop and deploy MemSys addons, achieving flexible feature composition and commercialization.

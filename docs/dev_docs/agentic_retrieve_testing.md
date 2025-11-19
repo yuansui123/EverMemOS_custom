@@ -1,32 +1,32 @@
-# Agentic 检索测试指南
+# Agentic Retrieval Testing Guide
 
-## 概述
+## Overview
 
-本文档说明如何测试 V3 API 的 Agentic 检索功能。Agentic 检索是一种 LLM 引导的智能多轮检索方法，能够自动判断检索结果的充分性并进行多轮优化。
+This document explains how to test the Agentic retrieval feature of the V3 API. Agentic retrieval is an LLM-guided intelligent multi-round retrieval method that can automatically determine the sufficiency of retrieval results and perform multi-round optimization.
 
-## 功能特性
+## Features
 
-### Agentic 检索流程
+### Agentic Retrieval Process
 
-1. **Round 1**: RRF 混合检索（Embedding + BM25）
-2. **Rerank**: 使用 Reranker 优化结果质量
-3. **LLM 判断**: 使用 LLM 判断结果是否充分
-4. **Round 2** (如需要): 
-   - LLM 生成多个改进查询
-   - 并行检索所有查询
-   - 融合并 Rerank 返回最终结果
+1. **Round 1**: RRF hybrid retrieval (Embedding + BM25)
+2. **Rerank**: Use Reranker to optimize result quality
+3. **LLM Judgment**: Use LLM to determine if results are sufficient
+4. **Round 2** (if needed): 
+   - LLM generates multiple refined queries
+   - Parallel retrieval for all queries
+   - Fusion and Rerank to return final results
 
-### API 端点
+### API Endpoint
 
 ```
 POST /api/v3/agentic/retrieve_agentic
 ```
 
-### 请求格式
+### Request Format
 
 ```json
 {
-  "query": "用户喜欢吃什么？",
+  "query": "What does the user like to eat?",
   "user_id": "default",
   "group_id": "assistant",
   "time_range_days": 365,
@@ -39,12 +39,12 @@ POST /api/v3/agentic/retrieve_agentic
 }
 ```
 
-### 响应格式
+### Response Format
 
 ```json
 {
   "status": "ok",
-  "message": "Agentic 检索成功，找到 15 条记忆",
+  "message": "Agentic retrieval successful, found 15 memories",
   "result": {
     "memories": [...],
     "count": 15,
@@ -53,8 +53,8 @@ POST /api/v3/agentic/retrieve_agentic
       "is_multi_round": true,
       "round1_count": 20,
       "is_sufficient": false,
-      "reasoning": "需要更多关于饮食偏好的具体信息",
-      "refined_queries": ["用户最喜欢的菜系？", "用户不喜欢吃什么？"],
+      "reasoning": "Need more specific information about dietary preferences",
+      "refined_queries": ["What is the user's favorite cuisine?", "What does the user dislike eating?"],
       "round2_count": 40,
       "final_count": 15,
       "total_latency_ms": 2345.67
@@ -63,99 +63,99 @@ POST /api/v3/agentic/retrieve_agentic
 }
 ```
 
-## 测试说明
+## Testing Instructions
 
-### 运行测试
+### Running Tests
 
 ```bash
-# 启动服务
+# Start the service
 uv run python src/bootstrap.py src/run.py --port 8001
 
-# 运行测试（在另一个终端）
+# Run tests (in another terminal)
 uv run python src/bootstrap.py demo/test_v3_retrieve_http.py
 ```
 
-### 环境配置
+### Environment Configuration
 
-Agentic 检索需要配置 LLM API Key：
+Agentic retrieval requires LLM API Key configuration:
 
 ```bash
-# .env 文件中添加
+# Add to .env file
 OPENROUTER_API_KEY=your_api_key
-# 或
+# or
 OPENAI_API_KEY=your_api_key
 ```
 
-如果未配置 API Key，测试将自动跳过 Agentic 检索部分。
+If no API Key is configured, the test will automatically skip the Agentic retrieval part.
 
-### 测试用例
+### Test Cases
 
-测试文件包含以下 Agentic 检索测试用例：
+The test file includes the following Agentic retrieval test cases:
 
-1. **简单查询**: "北京旅游" - 测试单轮检索（可能充分）
-2. **复杂查询**: "用户喜欢吃什么？平时的饮食习惯是什么？" - 测试多轮检索
-3. **多维度查询**: "用户的性格特点和兴趣爱好" - 测试多维度检索
+1. **Simple Query**: "Beijing travel" - Test single-round retrieval (possibly sufficient)
+2. **Complex Query**: "What does the user like to eat? What are their usual eating habits?" - Test multi-round retrieval
+3. **Multi-dimensional Query**: "User's personality traits and hobbies" - Test multi-dimensional retrieval
 
-### 预期结果
+### Expected Results
 
-- **单轮检索**: 如果 Round 1 结果充分，直接返回
-- **多轮检索**: 如果 Round 1 结果不充分，LLM 会生成改进查询并进行 Round 2
+- **Single-round Retrieval**: If Round 1 results are sufficient, return directly
+- **Multi-round Retrieval**: If Round 1 results are insufficient, LLM generates refined queries and proceeds to Round 2
 
-## 性能说明
+## Performance Notes
 
-- **延迟**: 通常 2-5 秒（包含 LLM 调用）
-- **成本**: 会产生 LLM API 调用费用（约 2-3 次调用）
-- **准确性**: 比普通检索更准确，特别适合复杂查询
+- **Latency**: Typically 2-5 seconds (including LLM calls)
+- **Cost**: Incurs LLM API call costs (approximately 2-3 calls)
+- **Accuracy**: More accurate than regular retrieval, especially suitable for complex queries
 
-## 与聊天模块的集成
+## Integration with Chat Module
 
-聊天模块 (`demo/chat_with_memory.py`) 已经集成了 Agentic 检索：
+The chat module (`demo/chat_with_memory.py`) has integrated Agentic retrieval:
 
-1. 启动聊天应用时选择 "Agentic 检索"
-2. 系统会自动使用 LLM 引导的多轮检索
-3. 每次对话都会输出详细的检索元数据
+1. Select "Agentic Retrieval" when starting the chat application
+2. The system will automatically use LLM-guided multi-round retrieval
+3. Each conversation outputs detailed retrieval metadata
 
-## 故障排除
+## Troubleshooting
 
-### 问题1: API Key 错误
+### Issue 1: API Key Error
 
-**现象**: 提示 "缺少 LLM API Key"
+**Symptom**: Prompt "Missing LLM API Key"
 
-**解决方案**:
+**Solution**:
 ```bash
-# 在 .env 文件中添加
+# Add to .env file
 OPENROUTER_API_KEY=your_key_here
 ```
 
-### 问题2: 超时
+### Issue 2: Timeout
 
-**现象**: 请求超时（超过60秒）
+**Symptom**: Request timeout (over 60 seconds)
 
-**原因**: Agentic 检索包含多次 LLM 调用，在网络较慢或 LLM 响应慢时可能超时
+**Cause**: Agentic retrieval involves multiple LLM calls, which may timeout with slow network or LLM response
 
-**解决方案**:
-- 检查网络连接
-- 使用更快的 LLM 模型（如 gpt-4o-mini）
-- 增加客户端超时时间
+**Solution**:
+- Check network connection
+- Use a faster LLM model (such as gpt-4o-mini)
+- Increase client timeout duration
 
-### 问题3: 检索结果为空
+### Issue 3: Empty Retrieval Results
 
-**现象**: 返回 0 条记忆
+**Symptom**: Returns 0 memories
 
-**原因**: 数据库中没有相关数据
+**Cause**: No relevant data in database
 
-**解决方案**:
+**Solution**:
 ```bash
-# 先运行数据导入
+# Run data import first
 uv run python src/bootstrap.py demo/extract_memory.py
 
-# 然后再测试检索
+# Then test retrieval
 uv run python src/bootstrap.py demo/test_v3_retrieve_http.py
 ```
 
-## 参考资料
+## References
 
-- [Agentic V3 API 文档](../api_docs/agentic_v3_api.md)
-- [Agentic 检索原理](./agentic_retrieval_guide.md)
-- [Memory Manager 使用指南](./api_usage_guide.md)
+- [Agentic V3 API Documentation](../api_docs/agentic_v3_api.md)
+- [Agentic Retrieval Guide](./agentic_retrieval_guide.md)
+- [Memory Manager Usage Guide](./api_usage_guide.md)
 
