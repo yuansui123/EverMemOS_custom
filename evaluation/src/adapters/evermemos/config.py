@@ -67,8 +67,8 @@ class ExperimentConfig:
     )
 
     # Stage4 parameter: select top-k from event_ids to build context
-    response_top_k: int = 20
-
+    response_top_k: int = 10
+    
     llm_service: str = "openai"  # openai, vllm
     llm_config: dict = {
         "openai": {
