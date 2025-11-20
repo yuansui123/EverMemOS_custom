@@ -565,8 +565,6 @@ class MemoryManager:
             # 处理时间范围过滤条件
             start_time_dt = None
             end_time_dt = None
-            semantic_start_dt = None
-            semantic_end_dt = None
             current_time_dt = None
 
             if start_time is not None:
@@ -588,11 +586,11 @@ class MemoryManager:
             # 处理语义记忆时间范围（仅对 semantic_memory 有效）
             if MemoryType.SEMANTIC_MEMORY in retrieve_mem_request.memory_types:
                 if retrieve_mem_request.start_time:
-                    semantic_start_dt = datetime.strptime(
+                    start_time_dt = datetime.strptime(
                         retrieve_mem_request.start_time, "%Y-%m-%d"
                     )
                 if retrieve_mem_request.end_time:
-                    semantic_end_dt = datetime.strptime(
+                    end_time_dt = datetime.strptime(
                         retrieve_mem_request.end_time, "%Y-%m-%d"
                     )
                 if retrieve_mem_request.current_time:
@@ -606,8 +604,8 @@ class MemoryManager:
                 search_results = await milvus_repo.vector_search(
                     query_vector=query_vector_list,
                     user_id=user_id,
-                    start_time=semantic_start_dt,
-                    end_time=semantic_end_dt,
+                    start_time=start_time_dt,
+                    end_time=end_time_dt,
                     current_time=current_time_dt,
                     limit=top_k,
                     score_threshold=0.0,
@@ -1070,8 +1068,6 @@ class MemoryManager:
             timestamp = from_iso_format(timestamp_raw)
 
             # 从缓存中获取 memcell 数据
-            linkdoc_source_type = None
-            source_id = None
             memcells = []
             if memcell_event_id_list:
                 # 按原始顺序从缓存中获取 memcells
@@ -1079,15 +1075,6 @@ class MemoryManager:
                     memcell = memcells_cache.get(event_id)
                     if memcell:
                         memcells.append(memcell)
-                        if (
-                            memcell.type == DataTypeEnum.DOCUMENT
-                        ):  # LinkDoc 即 Document 类型需要记录 source_type
-                            linkdoc_source_type = memcell.source_type
-                            source_id = memcell.file_id
-                        elif memcell.type == DataTypeEnum.EMAIL:
-                            source_id = (
-                                memcell.thread_id
-                            )  # 注：线程ID非独立ID，不能用于精确检索
                     else:
                         logger.warning(f"未找到 memcell: event_id={event_id}")
                         continue
@@ -1111,8 +1098,6 @@ class MemoryManager:
                 participants=participants,
                 memcell_event_id_list=memcell_event_id_list,
                 type=RawDataType.from_string(event_type),
-                source_type=linkdoc_source_type,
-                source_id=source_id,
                 extend={
                     '_search_source': search_source
                 },  # 添加搜索来源信息到 extend 字段

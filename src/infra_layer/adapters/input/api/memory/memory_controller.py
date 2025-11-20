@@ -111,20 +111,38 @@ class MemoryController(BaseController):
                 "description": "成功存储记忆数据",
                 "content": {
                     "application/json": {
-                        "example": {
-                            "status": "ok",
-                            "message": "记忆存储成功，共保存 1 条记忆",
-                            "result": {
-                                "saved_memories": [
-                                    {
-                                        "memory_type": "episode_memory",
-                                        "user_id": "user_001",
-                                        "group_id": "group_123",
-                                        "timestamp": "2025-01-15T10:00:00",
-                                        "content": "用户讨论了新功能的技术方案",
-                                    }
-                                ],
-                                "count": 1,
+                        "examples": {
+                            "extracted": {
+                                "summary": "提取到记忆（已触发边界）",
+                                "value": {
+                                    "status": "ok",
+                                    "message": "Extracted 1 memories",
+                                    "result": {
+                                        "saved_memories": [
+                                            {
+                                                "memory_type": "episode_memory",
+                                                "user_id": "user_001",
+                                                "group_id": "group_123",
+                                                "timestamp": "2025-01-15T10:00:00",
+                                                "content": "用户讨论了新功能的技术方案",
+                                            }
+                                        ],
+                                        "count": 1,
+                                        "status_info": "extracted",
+                                    },
+                                },
+                            },
+                            "accumulated": {
+                                "summary": "消息已累积（未触发边界）",
+                                "value": {
+                                    "status": "ok",
+                                    "message": "Message queued, awaiting boundary detection",
+                                    "result": {
+                                        "saved_memories": [],
+                                        "count": 0,
+                                        "status_info": "accumulated",
+                                    },
+                                },
                             },
                         }
                     }
@@ -198,7 +216,9 @@ class MemoryController(BaseController):
             memories = await self.memory_manager.memorize(memorize_request)
 
             # 5. 返回统一格式的响应
-            memory_count = len(memories) if memories else 0
+            # 确保 saved_memories 始终返回列表（空列表或有数据的列表），而不是 None
+            saved_memories = memories if memories else []
+            memory_count = len(saved_memories)
             logger.info("处理记忆请求完成，保存了 %s 条记忆", memory_count)
 
             # 优化返回信息，帮助用户理解运行状态
@@ -211,7 +231,7 @@ class MemoryController(BaseController):
                 "status": ErrorStatus.OK.value,
                 "message": message,
                 "result": {
-                    "saved_memories": memories,
+                    "saved_memories": saved_memories,
                     "count": memory_count,
                     "status_info": "accumulated" if memory_count == 0 else "extracted",
                 },

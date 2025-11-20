@@ -1,5 +1,33 @@
 # Memory API 文档
 
+## 目录
+
+- [概述](#概述)
+- [主要特性](#主要特性)
+- [接口说明](#接口说明)
+  - [POST `/api/v1/memories` - 存储单条消息记忆](#post-apiv1memories)
+- [使用场景](#使用场景)
+  - [1. 实时消息流处理](#1-实时消息流处理)
+  - [2. 聊天机器人集成](#2-聊天机器人集成)
+  - [3. 消息队列消费](#3-消息队列消费)
+- [使用示例](#使用示例)
+  - [使用 curl 调用](#使用-curl-调用)
+  - [使用 Python 代码调用](#使用-python-代码调用)
+  - [使用 run_memorize.py 脚本](#使用-run_memorizepy-脚本)
+- [常见问题](#常见问题)
+- [架构说明](#架构说明)
+  - [数据流](#数据流)
+  - [核心组件](#核心组件)
+- [记忆查询接口](#记忆查询接口)
+  - [GET `/api/v1/memories` - 获取用户记忆](#get-apiv1memories)
+  - [GET `/api/v1/memories/search` - 检索相关记忆](#get-apiv1memoriessearch)
+- [对话元数据管理](#对话元数据管理)
+  - [POST `/api/v1/memories/conversation-meta` - 保存对话元数据](#post-apiv1memoriesconversation-meta)
+  - [PATCH `/api/v1/memories/conversation-meta` - 局部更新对话元数据](#patch-apiv1memoriesconversation-meta)
+- [相关文档](#相关文档)
+
+---
+
 ## 概述
 
 Memory API 提供了专门用于处理群聊记忆的接口，采用简单直接的消息格式，无需任何预处理或格式转换。
@@ -54,10 +82,14 @@ Memory API 提供了专门用于处理群聊记忆的接口，采用简单直接
 
 **成功响应 (200 OK)**
 
+根据记忆提取的状态，响应会有两种形式：
+
+**1. 已提取记忆（extracted）** - 当消息触发了边界检测，成功提取了记忆：
+
 ```json
 {
   "status": "ok",
-  "message": "记忆存储成功，共保存 1 条记忆",
+  "message": "Extracted 1 memories",
   "result": {
     "saved_memories": [
       {
@@ -68,10 +100,30 @@ Memory API 提供了专门用于处理群聊记忆的接口，采用简单直接
         "content": "用户讨论了新功能的技术方案"
       }
     ],
-    "count": 1
+    "count": 1,
+    "status_info": "extracted"
   }
 }
 ```
+
+**2. 消息已累积（accumulated）** - 当消息已存储但未触发边界检测：
+
+```json
+{
+  "status": "ok",
+  "message": "Message queued, awaiting boundary detection",
+  "result": {
+    "saved_memories": [],
+    "count": 0,
+    "status_info": "accumulated"
+  }
+}
+```
+
+**字段说明**：
+- `status_info`: 处理状态，`extracted` 表示已提取记忆，`accumulated` 表示消息已累积等待边界检测
+- `saved_memories`: 已保存的记忆列表，当 `status_info` 为 `accumulated` 时为空数组
+- `count`: 保存的记忆数量
 
 **错误响应 (400 Bad Request)**
 
@@ -369,6 +421,250 @@ Memory Manager (memory_manager.py)
    - 记忆提取和存储
    - 向量化
    - 持久化
+
+---
+
+## 记忆查询接口
+
+### GET `/api/v1/memories`
+
+通过 KV 方式获取用户的核心记忆数据。
+
+#### 功能说明
+
+- 根据用户ID直接获取存储的核心记忆
+- 支持多种记忆类型：基础记忆、用户画像、偏好设置等
+- 支持分页和排序
+- 适用于需要快速获取用户固定记忆集合的场景
+
+#### 请求参数（Query Parameters）
+
+| 参数 | 类型 | 必需 | 默认值 | 说明 |
+|-----|------|------|--------|------|
+| user_id | string | 是 | - | 用户ID |
+| memory_type | string | 否 | "multiple" | 记忆类型，可选值：`base_memory`、`profile`、`preference`、`episode_memory`、`multiple` |
+| limit | integer | 否 | 40 | 返回记忆的最大数量 |
+| offset | integer | 否 | 0 | 分页偏移量 |
+| sort_by | string | 否 | - | 排序字段 |
+| sort_order | string | 否 | "desc" | 排序方向，可选值：`asc`、`desc` |
+
+**记忆类型说明**：
+- `base_memory`: 基础记忆，用户的基本信息和常用数据
+- `profile`: 用户画像，包含用户的特征和属性
+- `preference`: 用户偏好，包含用户的喜好和设置
+- `episode_memory`: 情景记忆摘要
+- `multiple`: 多类型（默认），包含 base_memory、profile、preference
+
+#### 响应格式
+
+**成功响应 (200 OK)**
+
+```json
+{
+  "status": "ok",
+  "message": "记忆获取成功，共获取 15 条记忆",
+  "result": {
+    "memories": [
+      {
+        "memory_type": "base_memory",
+        "user_id": "user_123",
+        "timestamp": "2024-01-15T10:30:00",
+        "content": "用户喜欢喝咖啡",
+        "summary": "咖啡偏好"
+      },
+      {
+        "memory_type": "profile",
+        "user_id": "user_123",
+        "timestamp": "2024-01-14T09:20:00",
+        "content": "用户是一名软件工程师"
+      }
+    ],
+    "total_count": 15,
+    "has_more": false,
+    "metadata": {
+      "source": "fetch_mem_service",
+      "user_id": "user_123",
+      "memory_type": "fetch"
+    }
+  }
+}
+```
+
+#### 使用示例
+
+**使用 curl**：
+
+```bash
+curl -X GET "http://localhost:1995/api/v1/memories?user_id=user_123&memory_type=multiple&limit=20" \
+  -H "Content-Type: application/json"
+```
+
+**使用 Python**：
+
+```python
+import httpx
+import asyncio
+
+async def fetch_memories():
+    params = {
+        "user_id": "user_123",
+        "memory_type": "multiple",
+        "limit": 20,
+        "offset": 0
+    }
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            "http://localhost:1995/api/v1/memories",
+            params=params
+        )
+        result = response.json()
+        print(f"获取了 {len(result['result']['memories'])} 条记忆")
+
+asyncio.run(fetch_memories())
+```
+
+---
+
+### GET `/api/v1/memories/search`
+
+基于查询文本使用关键词、向量或混合方法检索相关的记忆数据。
+
+#### 功能说明
+
+- 根据查询文本查找最相关的记忆
+- 支持关键词（BM25）、向量相似度、混合检索三种方法
+- 支持时间范围过滤
+- 返回结果按群组组织，并包含相关性评分
+- 适用于需要精确匹配或语义检索的场景
+
+#### 请求格式
+
+**Content-Type**: `application/json`
+
+**请求体**：
+
+```json
+{
+  "user_id": "user_123",
+  "query": "咖啡偏好",
+  "retrieve_method": "keyword",
+  "top_k": 10,
+  "start_time": "2024-01-01T00:00:00",
+  "end_time": "2024-12-31T23:59:59",
+  "memory_types": ["episode_memory"],
+  "filters": {
+    "group_id": "group_456"
+  }
+}
+```
+
+**字段说明**：
+
+| 字段 | 类型 | 必需 | 默认值 | 说明 |
+|-----|------|------|--------|------|
+| user_id | string | 是 | - | 用户ID |
+| query | string | 否 | - | 查询文本 |
+| retrieve_method | string | 否 | "keyword" | 检索方法，可选值：`keyword`、`vector`、`hybrid` |
+| top_k | integer | 否 | 40 | 返回的最大结果数 |
+| start_time | string | 否 | - | 时间范围起点（ISO 8601格式） |
+| end_time | string | 否 | - | 时间范围终点（ISO 8601格式） |
+| memory_types | array | 否 | [] | 要检索的记忆类型列表 |
+| filters | object | 否 | {} | 额外的过滤条件 |
+| radius | float | 否 | 0.6 | 向量检索时的相似度阈值（仅对 vector 和 hybrid 方法有效） |
+
+**检索方法说明**：
+- `keyword`: 基于关键词的 BM25 检索，适合精确匹配，速度快（默认方法）
+- `vector`: 基于语义向量的相似度检索，适合模糊查询和语义相似查询
+- `hybrid`: 混合检索策略，结合关键词和向量检索的优势（推荐）
+
+#### 响应格式
+
+**成功响应 (200 OK)**
+
+```json
+{
+  "status": "ok",
+  "message": "记忆检索成功，共检索到 2 个群组",
+  "result": {
+    "memories": [
+      {
+        "group_456": [
+          {
+            "memory_type": "episode_memory",
+            "user_id": "user_123",
+            "timestamp": "2024-01-15T10:30:00",
+            "summary": "讨论了咖啡偏好",
+            "group_id": "group_456"
+          }
+        ]
+      }
+    ],
+    "scores": [
+      {
+        "group_456": [0.95]
+      }
+    ],
+    "importance_scores": [0.85],
+    "original_data": [],
+    "total_count": 2,
+    "has_more": false,
+    "query_metadata": {
+      "source": "episodic_memory_es_repository",
+      "user_id": "user_123",
+      "memory_type": "retrieve"
+    }
+  }
+}
+```
+
+**返回结果说明**：
+- `memories`: 记忆列表，按群组（group）组织
+- `scores`: 每条记忆的相关性得分
+- `importance_scores`: 群组重要性得分，用于排序
+- `total_count`: 总记忆数
+- `has_more`: 是否还有更多结果
+
+#### 使用示例
+
+**使用 curl**：
+
+```bash
+curl -X GET http://localhost:1995/api/v1/memories/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "user_123",
+    "query": "咖啡偏好",
+    "retrieve_method": "keyword",
+    "top_k": 10
+  }'
+```
+
+**使用 Python**：
+
+```python
+import httpx
+import asyncio
+
+async def search_memories():
+    search_data = {
+        "user_id": "user_123",
+        "query": "咖啡偏好",
+        "retrieve_method": "hybrid",
+        "top_k": 10,
+        "memory_types": ["episode_memory"]
+    }
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            "http://localhost:1995/api/v1/memories/search",
+            json=search_data
+        )
+        result = response.json()
+        print(f"检索到 {result['result']['total_count']} 条记忆")
+
+asyncio.run(search_memories())
+```
 
 ---
 

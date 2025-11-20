@@ -1,5 +1,33 @@
 # Memory API Documentation
 
+## Table of Contents
+
+- [Overview](#overview)
+- [Key Features](#key-features)
+- [Interface Specification](#interface-specification)
+  - [POST `/api/v1/memories` - Store Single Message Memory](#post-apiv1memories)
+- [Use Cases](#use-cases)
+  - [1. Real-time Message Stream Processing](#1-real-time-message-stream-processing)
+  - [2. Chatbot Integration](#2-chatbot-integration)
+  - [3. Message Queue Consumption](#3-message-queue-consumption)
+- [Usage Examples](#usage-examples)
+  - [Using curl](#using-curl)
+  - [Using Python Code](#using-python-code)
+  - [Using run_memorize.py Script](#using-run_memorizepy-script)
+- [FAQ](#faq)
+- [Architecture](#architecture)
+  - [Data Flow](#data-flow)
+  - [Core Components](#core-components)
+- [Memory Query Interfaces](#memory-query-interfaces)
+  - [GET `/api/v1/memories` - Fetch User Memories](#get-apiv1memories)
+  - [GET `/api/v1/memories/search` - Search Memories](#get-apiv1memoriessearch)
+- [Conversation Metadata Management](#conversation-metadata-management)
+  - [POST `/api/v1/memories/conversation-meta` - Save Conversation Metadata](#post-apiv1memoriesconversation-meta)
+  - [PATCH `/api/v1/memories/conversation-meta` - Partial Update Conversation Metadata](#patch-apiv1memoriesconversation-meta)
+- [Related Documentation](#related-documentation)
+
+---
+
 ## Overview
 
 The Memory API provides specialized interfaces for processing group chat memories, using a simple and direct message format without any preprocessing or format conversion.
@@ -54,10 +82,14 @@ Store a single group chat message memory
 
 **Success Response (200 OK)**
 
+The response has two forms depending on the memory extraction status:
+
+**1. Extracted** - When the message triggers boundary detection and successfully extracts memories:
+
 ```json
 {
   "status": "ok",
-  "message": "Memory stored successfully, 1 memory saved",
+  "message": "Extracted 1 memories",
   "result": {
     "saved_memories": [
       {
@@ -68,10 +100,30 @@ Store a single group chat message memory
         "content": "User discussed technical approach for the new feature"
       }
     ],
-    "count": 1
+    "count": 1,
+    "status_info": "extracted"
   }
 }
 ```
+
+**2. Accumulated** - When the message is stored but does not trigger boundary detection:
+
+```json
+{
+  "status": "ok",
+  "message": "Message queued, awaiting boundary detection",
+  "result": {
+    "saved_memories": [],
+    "count": 0,
+    "status_info": "accumulated"
+  }
+}
+```
+
+**Field Descriptions**:
+- `status_info`: Processing status, `extracted` means memories were extracted, `accumulated` means message is queued awaiting boundary detection
+- `saved_memories`: List of saved memories, empty array when `status_info` is `accumulated`
+- `count`: Number of saved memories
 
 **Error Response (400 Bad Request)**
 
@@ -371,6 +423,248 @@ Database / Vector Database
    - Persistence
 
 ---
+
+## Memory Query Interfaces
+
+### GET `/api/v1/memories`
+
+Retrieve user's core memory data through KV method.
+
+#### Features
+
+- Directly retrieve stored core memories based on user ID
+- Support multiple memory types: base memory, profile, preferences, etc.
+- Support pagination and sorting
+- Suitable for scenarios requiring quick access to user's fixed memory collection
+
+#### Request Parameters (Query Parameters)
+
+| Parameter | Type | Required | Default | Description |
+|-----------|------|----------|---------|-------------|
+| user_id | string | Yes | - | User ID |
+| memory_type | string | No | "multiple" | Memory type, options: `base_memory`, `profile`, `preference`, `episode_memory`, `multiple` |
+| limit | integer | No | 40 | Maximum number of memories to return |
+| offset | integer | No | 0 | Pagination offset |
+| sort_by | string | No | - | Sort field |
+| sort_order | string | No | "desc" | Sort direction, options: `asc`, `desc` |
+
+**Memory Type Descriptions**:
+- `base_memory`: Base memory, user's basic information and common data
+- `profile`: User profile, containing user's characteristics and attributes
+- `preference`: User preferences, containing user's likes and settings
+- `episode_memory`: Episodic memory summary
+- `multiple`: Multiple types (default), includes base_memory, profile, preference
+
+#### Response Format
+
+**Success Response (200 OK)**
+
+```json
+{
+  "status": "ok",
+  "message": "记忆获取成功，共获取 15 条记忆",
+  "result": {
+    "memories": [
+      {
+        "memory_type": "base_memory",
+        "user_id": "user_123",
+        "timestamp": "2024-01-15T10:30:00",
+        "content": "User likes coffee",
+        "summary": "Coffee preference"
+      },
+      {
+        "memory_type": "profile",
+        "user_id": "user_123",
+        "timestamp": "2024-01-14T09:20:00",
+        "content": "User is a software engineer"
+      }
+    ],
+    "total_count": 15,
+    "has_more": false,
+    "metadata": {
+      "source": "fetch_mem_service",
+      "user_id": "user_123",
+      "memory_type": "fetch"
+    }
+  }
+}
+```
+
+#### Usage Examples
+
+**Using curl**:
+
+```bash
+curl -X GET "http://localhost:1995/api/v1/memories?user_id=user_123&memory_type=multiple&limit=20" \
+  -H "Content-Type: application/json"
+```
+
+**Using Python**:
+
+```python
+import httpx
+import asyncio
+
+async def fetch_memories():
+    params = {
+        "user_id": "user_123",
+        "memory_type": "multiple",
+        "limit": 20,
+        "offset": 0
+    }
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            "http://localhost:1995/api/v1/memories",
+            params=params
+        )
+        result = response.json()
+        print(f"Fetched {len(result['result']['memories'])} memories")
+
+asyncio.run(fetch_memories())
+```
+
+---
+
+### GET `/api/v1/memories/search`
+
+Retrieve relevant memories based on query text using keyword, vector, or hybrid methods.
+
+#### Features
+
+- Find most relevant memories based on query text
+- Support three retrieval methods: keyword (BM25), vector similarity, and hybrid
+- Support time range filtering
+- Results organized by groups with relevance scores
+- Suitable for scenarios requiring exact matching or semantic retrieval
+
+#### Request Format
+
+**Content-Type**: `application/json`
+
+**Request Body**:
+
+```json
+{
+  "user_id": "user_123",
+  "query": "coffee preference",
+  "retrieve_method": "keyword",
+  "top_k": 10,
+  "start_time": "2024-01-01T00:00:00",
+  "end_time": "2024-12-31T23:59:59",
+  "memory_types": ["episode_memory"],
+  "filters": {
+    "group_id": "group_456"
+  }
+}
+```
+
+**Field Descriptions**:
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| user_id | string | Yes | - | User ID |
+| query | string | No | - | Query text |
+| retrieve_method | string | No | "keyword" | Retrieval method, options: `keyword`, `vector`, `hybrid` |
+| top_k | integer | No | 40 | Maximum number of results to return |
+| start_time | string | No | - | Time range start (ISO 8601 format) |
+| end_time | string | No | - | Time range end (ISO 8601 format) |
+| memory_types | array | No | [] | List of memory types to retrieve |
+| filters | object | No | {} | Additional filter conditions |
+| radius | float | No | 0.6 | Similarity threshold for vector retrieval (only for vector and hybrid methods) |
+
+**Retrieval Method Descriptions**:
+- `keyword`: BM25 keyword-based retrieval, suitable for exact matching, fast (default)
+- `vector`: Semantic vector similarity retrieval, suitable for fuzzy queries and semantic similarity
+- `hybrid`: Hybrid retrieval strategy combining keyword and vector advantages (recommended)
+
+#### Response Format
+
+**Success Response (200 OK)**
+
+```json
+{
+  "status": "ok",
+  "message": "记忆检索成功，共检索到 2 个群组",
+  "result": {
+    "memories": [
+      {
+        "group_456": [
+          {
+            "memory_type": "episode_memory",
+            "user_id": "user_123",
+            "timestamp": "2024-01-15T10:30:00",
+            "summary": "Discussed coffee preferences",
+            "group_id": "group_456"
+          }
+        ]
+      }
+    ],
+    "scores": [
+      {
+        "group_456": [0.95]
+      }
+    ],
+    "importance_scores": [0.85],
+    "original_data": [],
+    "total_count": 2,
+    "has_more": false,
+    "query_metadata": {
+      "source": "episodic_memory_es_repository",
+      "user_id": "user_123",
+      "memory_type": "retrieve"
+    }
+  }
+}
+```
+
+**Return Field Descriptions**:
+- `memories`: Memory list organized by groups
+- `scores`: Relevance score for each memory
+- `importance_scores`: Group importance scores used for sorting
+- `total_count`: Total number of memories
+- `has_more`: Whether there are more results
+
+#### Usage Examples
+
+**Using curl**:
+
+```bash
+curl -X GET http://localhost:1995/api/v1/memories/search \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "user_123",
+    "query": "coffee preference",
+    "retrieve_method": "keyword",
+    "top_k": 10
+  }'
+```
+
+**Using Python**:
+
+```python
+import httpx
+import asyncio
+
+async def search_memories():
+    search_data = {
+        "user_id": "user_123",
+        "query": "coffee preference",
+        "retrieve_method": "hybrid",
+        "top_k": 10,
+        "memory_types": ["episode_memory"]
+    }
+    
+    async with httpx.AsyncClient() as client:
+        response = await client.get(
+            "http://localhost:1995/api/v1/memories/search",
+            json=search_data
+        )
+        result = response.json()
+        print(f"Found {result['result']['total_count']} memories")
+
+asyncio.run(search_memories())
+```
 
 ---
 

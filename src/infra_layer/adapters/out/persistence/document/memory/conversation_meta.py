@@ -15,13 +15,17 @@ from core.oxm.mongo.audit_base import AuditBase
 
 class UserDetailModel(BaseModel):
     """用户详情嵌套模型
-    
+
     用于存储用户的基本信息和额外扩展信息
     """
 
     full_name: str = Field(..., description="用户全名")
-    role: Optional[str] = Field(default=None, description="用户角色，如：用户、助手、管理员等")
-    extra: Optional[Dict[str, Any]] = Field(default=None, description="扩展字段，支持动态schema")
+    role: Optional[str] = Field(
+        default=None, description="用户角色，如：用户、助手、管理员等"
+    )
+    extra: Optional[Dict[str, Any]] = Field(
+        default=None, description="扩展字段，支持动态schema"
+    )
 
 
 class ConversationMeta(DocumentBase, AuditBase):
@@ -37,8 +41,8 @@ class ConversationMeta(DocumentBase, AuditBase):
 
     # 场景信息
     scene: str = Field(..., description="场景标识符，用于区分不同的应用场景")
-    scene_desc: Dict[str, Any] = Field(
-        default_factory=dict, description="场景描述信息，通常包含bot_ids等字段"
+    scene_desc: Optional[Dict[str, Any]] = Field(
+        default=None, description="场景描述信息，通常包含bot_ids等字段"
     )
 
     # 对话基本信息
@@ -59,7 +63,9 @@ class ConversationMeta(DocumentBase, AuditBase):
     )
 
     # 标签和分类
-    tags: List[str] = Field(default_factory=list, description="标签列表，用于分类和检索")
+    tags: List[str] = Field(
+        default_factory=list, description="标签列表，用于分类和检索"
+    )
 
     model_config = ConfigDict(
         # 集合名称
@@ -120,4 +126,3 @@ class ConversationMeta(DocumentBase, AuditBase):
         ]
         validate_on_save = True
         use_state_management = True
-

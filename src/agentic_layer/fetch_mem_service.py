@@ -33,6 +33,10 @@ from infra_layer.adapters.out.persistence.repository.relationship_raw_repository
 from infra_layer.adapters.out.persistence.repository.behavior_history_raw_repository import (
     BehaviorHistoryRawRepository,
 )
+from infra_layer.adapters.out.persistence.repository.conversation_meta_raw_repository import (
+    ConversationMetaRawRepository,
+)
+
 from .dtos.memory_query import FetchMemResponse, FetchMemRequest
 
 from .memory_models import (
@@ -156,7 +160,7 @@ class FetchMemoryServiceImpl(FetchMemoryServiceInterface):
         self._entity_repo = None
         self._relationship_repo = None
         self._behavior_repo = None
-        self._employee_org_repo = None
+        self._conversation_meta_repo = None
         logger.info("FetchMemoryServiceImpl initialized")
 
     def _get_repositories(self):
@@ -173,47 +177,79 @@ class FetchMemoryServiceImpl(FetchMemoryServiceInterface):
             self._relationship_repo = get_bean_by_type(RelationshipRawRepository)
         if self._behavior_repo is None:
             self._behavior_repo = get_bean_by_type(BehaviorHistoryRawRepository)
+        if self._conversation_meta_repo is None:
+            self._conversation_meta_repo = get_bean_by_type(
+                ConversationMetaRawRepository
+            )
 
     async def _get_employee_metadata(
-        self, user_id: str, source: str, memory_type: str, limit: int = None
+        self,
+        user_id: str,
+        source: str,
+        memory_type: str,
+        limit: int = None,
+        group_id: str = None,
     ) -> Metadata:
         """
-        根据用户ID获取员工信息并创建Metadata
+        根据用户ID获取用户信息并创建Metadata
+
+        从 conversation-meta 的 user_details 中获取用户详情信息。
+        employee_org 相关表已被移除，现在用户信息来自 conversation-meta。
 
         Args:
             user_id: 用户ID
             source: 数据来源
             memory_type: 记忆类型
             limit: 限制数量（可选）
+            group_id: 群组ID（可选），如果提供则从 conversation-meta 获取用户详情
 
         Returns:
             Metadata 对象
         """
         try:
-            # 确保仓库已初始化
-            if self._employee_org_repo is None:
-                self._get_repositories()
+            # 如果提供了 group_id，尝试从 conversation_meta 获取用户详情
+            if group_id:
+                # 确保仓库已初始化
+                if self._conversation_meta_repo is None:
+                    self._get_repositories()
 
-            # 查询员工组织信息
-            employee_org = await self._employee_org_repo.get_by_user_id(user_id)
+                # 查询对话元数据
+                conversation_meta = await self._conversation_meta_repo.get_by_group_id(
+                    group_id
+                )
 
-            if employee_org:
-                return Metadata(
-                    source=source,
-                    user_id=user_id,
-                    memory_type=memory_type,
-                    limit=limit,
-                    email=employee_org.email,
-                    phone=employee_org.phone,
-                    full_name=employee_org.full_name,
-                )
-            else:
-                # 如果没有找到员工信息，只返回基本信息
-                return Metadata(
-                    source=source, user_id=user_id, memory_type=memory_type, limit=limit
-                )
+                # 如果找到对话元数据，并且包含该用户的详情
+                if conversation_meta and conversation_meta.user_details:
+                    user_detail = conversation_meta.user_details.get(user_id)
+                    if user_detail:
+                        # 从 user_details 中提取用户信息
+                        # user_detail 是 UserDetailModel 对象，包含 full_name, role, extra
+                        return Metadata(
+                            source=source,
+                            user_id=user_id,
+                            memory_type=memory_type,
+                            limit=limit,
+                            full_name=user_detail.full_name,
+                            # 如果 extra 中有 email 和 phone，也提取出来
+                            email=(
+                                user_detail.extra.get("email")
+                                if user_detail.extra
+                                else None
+                            ),
+                            phone=(
+                                user_detail.extra.get("phone")
+                                if user_detail.extra
+                                else None
+                            ),
+                        )
+
+            # 如果没有 group_id 或没有找到用户信息，返回基本信息
+            return Metadata(
+                source=source, user_id=user_id, memory_type=memory_type, limit=limit
+            )
+
         except Exception as e:
-            logger.warning(f"获取员工信息失败: {e}，使用基本信息创建Metadata")
+            logger.warning(f"获取用户信息失败: {e}，使用基本信息创建Metadata")
             return Metadata(
                 source=source, user_id=user_id, memory_type=memory_type, limit=limit
             )
