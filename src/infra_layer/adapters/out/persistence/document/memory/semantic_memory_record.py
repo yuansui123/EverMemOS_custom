@@ -1,7 +1,7 @@
 """
-PersonalEventLog Beanie ODM 模型
+SemanticMemoryRecord Beanie ODM 模型
 
-存储从个人情景记忆中提取的事件日志（原子事实），每个个人 episode 可以有多条原子事实。
+统一存储从情景记忆（个人或群组）中提取的语义记忆。
 """
 
 from datetime import datetime
@@ -14,50 +14,58 @@ from core.oxm.mongo.audit_base import AuditBase
 from beanie import PydanticObjectId
 
 
-class PersonalEventLog(DocumentBase, AuditBase):
+class SemanticMemoryRecord(DocumentBase, AuditBase):
     """
-    个人事件日志文档模型
+    通用语义记忆文档模型
 
-    存储从个人情景记忆（EpisodicMemory）中提取的原子事实。
-    每个个人 episode 可以有多条原子事实，用于细粒度的事实检索。
+    统一存储个人或群组情景记忆中提取的语义信息。
+    当 user_id 存在时代表个人语义记忆；当 user_id 为空而 group_id 存在时代表群组语义记忆。
     """
 
-    # 核心字段（必填）
-    user_id: str = Field(..., description="用户ID")
-    atomic_fact: str = Field(..., min_length=1, description="原子事实内容")
+    # 核心字段
+    user_id: Optional[str] = Field(default=None, description="用户ID，个人记忆必填，群组记忆可为空")
+    user_name: Optional[str] = Field(default=None, description="用户名称")
+    group_id: Optional[str] = Field(default=None, description="群组ID")
+    group_name: Optional[str] = Field(default=None, description="群组名称")
+    content: str = Field(..., min_length=1, description="语义记忆内容")
     parent_episode_id: str = Field(..., description="父情景记忆的 event_id")
 
-    # 时间信息
-    timestamp: datetime = Field(..., description="事件发生时间")
+    # 时间范围字段
+    start_time: Optional[str] = Field(default=None, description="语义记忆开始时间（日期字符串，如 2024-01-01）")
+    end_time: Optional[str] = Field(default=None, description="语义记忆结束时间（日期字符串，如 2024-12-31）")
+    duration_days: Optional[int] = Field(default=None, description="持续天数")
 
     # 群组和参与者信息
-    group_id: Optional[str] = Field(default=None, description="群组ID")
     participants: Optional[List[str]] = Field(default=None, description="相关参与者")
 
     # 向量和模型
-    vector: Optional[List[float]] = Field(default=None, description="原子事实的文本向量")
+    vector: Optional[List[float]] = Field(default=None, description="语义记忆的文本向量")
     vector_model: Optional[str] = Field(default=None, description="使用的向量化模型")
 
-    # 事件类型和扩展信息
-    event_type: Optional[str] = Field(default=None, description="事件类型，如 Conversation")
+    # 证据和扩展信息
+    evidence: Optional[str] = Field(default=None, description="支持该语义记忆的证据")
     extend: Optional[Dict[str, Any]] = Field(default=None, description="扩展字段")
 
     model_config = ConfigDict(
-        collection="personal_event_logs",
+        collection="semantic_memory_records",
         validate_assignment=True,
         json_encoders={datetime: lambda dt: dt.isoformat()},
         json_schema_extra={
             "example": {
                 "user_id": "user_12345",
-                "atomic_fact": "用户在2024年1月1日去了成都",
+                "user_name": "Alice",
+                "content": "用户喜欢吃川菜，尤其是麻辣火锅",
                 "parent_episode_id": "episode_001",
-                "timestamp": "2024-01-01T10:00:00+08:00",
-                "group_id": "group_travel",
+                "start_time": "2024-01-01",
+                "end_time": "2024-12-31",
+                "duration_days": 365,
+                "group_id": "group_friends",
+                "group_name": "朋友群",
                 "participants": ["张三", "李四"],
                 "vector": [0.1, 0.2, 0.3],
                 "vector_model": "text-embedding-3-small",
-                "event_type": "Conversation",
-                "extend": {"location": "成都"}
+                "evidence": "多次在聊天中提到喜欢吃火锅",
+                "extend": {"confidence": 0.9}
             }
         },
     )
@@ -70,14 +78,11 @@ class PersonalEventLog(DocumentBase, AuditBase):
     class Settings:
         """Beanie 设置"""
 
-        name = "personal_event_logs"
+        name = "semantic_memory_records"
 
         indexes = [
             # 用户ID索引
-            IndexModel(
-                [("user_id", ASCENDING)],
-                name="idx_user_id",
-            ),
+            IndexModel([("user_id", ASCENDING)], name="idx_user_id"),
             # 父情景记忆索引
             IndexModel(
                 [("parent_episode_id", ASCENDING)],
@@ -88,17 +93,8 @@ class PersonalEventLog(DocumentBase, AuditBase):
                 [("user_id", ASCENDING), ("parent_episode_id", ASCENDING)],
                 name="idx_user_parent",
             ),
-            # 用户ID和时间戳复合索引
-            IndexModel(
-                [("user_id", ASCENDING), ("timestamp", DESCENDING)],
-                name="idx_user_timestamp",
-            ),
             # 群组ID索引
-            IndexModel(
-                [("group_id", ASCENDING)],
-                name="idx_group_id",
-                sparse=True,
-            ),
+            IndexModel([("group_id", ASCENDING)], name="idx_group_id", sparse=True),
             # 创建时间索引
             IndexModel([("created_at", DESCENDING)], name="idx_created_at"),
             # 更新时间索引
@@ -110,5 +106,5 @@ class PersonalEventLog(DocumentBase, AuditBase):
 
 
 # 导出模型
-__all__ = ["PersonalEventLog"]
+__all__ = ["SemanticMemoryRecord"]
 

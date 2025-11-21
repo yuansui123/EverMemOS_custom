@@ -10,19 +10,20 @@ import pprint
 from typing import List, Optional, Dict, Any
 from elasticsearch.dsl import Q
 from core.oxm.es.base_repository import BaseRepository
-from infra_layer.adapters.out.search.elasticsearch.memory.episodic_memory import (
-    EpisodicMemoryDoc,
+from infra_layer.adapters.out.search.elasticsearch.memory.event_log import (
+    EventLogDoc,
 )
 from core.observation.logger import get_logger
 from common_utils.datetime_utils import get_now_with_timezone
 from common_utils.text_utils import SmartTextParser
 from core.di.decorators import repository
+from memory_layer.memory_scope import MemoryScope
 
 logger = get_logger(__name__)
 
 
 @repository("event_log_es_repository", primary=True)
-class EventLogEsRepository(BaseRepository[EpisodicMemoryDoc]):
+class EventLogEsRepository(BaseRepository[EventLogDoc]):
     """
     事件日志 Elasticsearch 仓库
 
@@ -37,7 +38,7 @@ class EventLogEsRepository(BaseRepository[EpisodicMemoryDoc]):
 
     def __init__(self):
         """初始化事件日志仓库"""
-        super().__init__(EpisodicMemoryDoc)
+        super().__init__(EventLogDoc)
         # 初始化智能文本解析器，用于计算查询词的智能长度
         self._text_parser = SmartTextParser()
 
@@ -79,18 +80,20 @@ class EventLogEsRepository(BaseRepository[EpisodicMemoryDoc]):
 
     async def create_and_save_event_log(
         self,
-        log_id: str,
+        event_id: str,
         user_id: str,
         timestamp: datetime,
         atomic_fact: str,
         search_content: List[str],
         parent_episode_id: Optional[str] = None,
         group_id: Optional[str] = None,
+        group_name: str = "",
+        user_name: str = "",
         participants: Optional[List[str]] = None,
         extend: Optional[Dict[str, Any]] = None,
         created_at: Optional[datetime] = None,
         updated_at: Optional[datetime] = None,
-    ) -> EpisodicMemoryDoc:
+    ) -> EventLogDoc:
         """
         创建并保存事件日志文档
 
@@ -108,7 +111,7 @@ class EventLogEsRepository(BaseRepository[EpisodicMemoryDoc]):
             updated_at: 更新时间
 
         Returns:
-            已保存的EpisodicMemoryDoc实例
+            已保存的EventLogDoc实例
         """
         try:
             # 设置默认时间戳
@@ -125,18 +128,20 @@ class EventLogEsRepository(BaseRepository[EpisodicMemoryDoc]):
                 "atomic_fact": atomic_fact,
             })
 
-            # 创建文档实例（复用 EpisodicMemoryDoc）
-            doc = EpisodicMemoryDoc(
-                event_id=log_id,
-                type="event_log",  # 标记类型
+            # 创建文档实例
+            doc = EventLogDoc(
+                event_id=event_id,
+                type="Conversation",
                 user_id=user_id,
-                user_name='',
+                user_name=user_name or "",
                 timestamp=timestamp,
                 title='',
-                episode=atomic_fact,  # 将 atomic_fact 存储在 episode 字段
+                episode='',
+                atomic_fact=atomic_fact,
                 search_content=search_content,
                 summary='',
                 group_id=group_id,
+                group_name=group_name or "",
                 participants=participants or [],
                 keywords=[],
                 linked_entities=[],
@@ -152,12 +157,12 @@ class EventLogEsRepository(BaseRepository[EpisodicMemoryDoc]):
             await doc.save(using=client)
 
             logger.debug(
-                "✅ 创建事件日志文档成功: log_id=%s, user_id=%s", log_id, user_id
+                "✅ 创建事件日志文档成功: event_id=%s, user_id=%s", event_id, user_id
             )
             return doc
 
         except Exception as e:
-            logger.error("❌ 创建事件日志文档失败: log_id=%s, error=%s", log_id, e)
+            logger.error("❌ 创建事件日志文档失败: event_id=%s, error=%s", event_id, e)
             raise
 
     # ==================== 搜索功能 ====================
@@ -173,6 +178,7 @@ class EventLogEsRepository(BaseRepository[EpisodicMemoryDoc]):
         from_: int = 0,
         explain: bool = False,
         participant_user_id: Optional[str] = None,
+        memory_scope: MemoryScope = MemoryScope.ALL,
     ) -> Dict[str, Any]:
         """
         使用 elasticsearch-dsl 的统一搜索接口，支持多词查询和全面过滤
@@ -196,21 +202,24 @@ class EventLogEsRepository(BaseRepository[EpisodicMemoryDoc]):
         """
         try:
             # 创建 AsyncSearch 对象
-            search = EpisodicMemoryDoc.search()
+            search = EventLogDoc.search()
 
             # 构建过滤条件
             filter_queries = []
             
-            # ⚠️ 核心：只检索 type="event_log" 的文档
-            filter_queries.append(Q("term", type="event_log"))
-            
-            if user_id is not None:  # 使用 is not None 而不是 truthy 检查，支持空字符串
-                if user_id:  # 非空字符串：个人记忆
+            # 根据 memory_scope 处理 user_id 过滤
+            if memory_scope == MemoryScope.PERSONAL:
+                # 个人记忆: user_id != ""
+                if user_id:
                     filter_queries.append(Q("term", user_id=user_id))
-                else:  # 空字符串：群组记忆
-                    filter_queries.append(Q("term", user_id=""))
-            if participant_user_id:
-                filter_queries.append(Q("term", participants=participant_user_id))
+                else:
+                    # 如果没有传 user_id,则过滤所有非空 user_id
+                    filter_queries.append(Q("bool", must_not=Q("term", user_id="")))
+            elif memory_scope == MemoryScope.GROUP:
+                # 群组记忆: user_id == ""
+                filter_queries.append(Q("term", user_id=""))
+            # else: MemoryScope.ALL - 不过滤 user_id
+            
             if group_id:
                 filter_queries.append(Q("term", group_id=group_id))
             if keywords:

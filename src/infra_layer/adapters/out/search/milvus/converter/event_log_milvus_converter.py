@@ -1,8 +1,7 @@
 """
 事件日志 Milvus 转换器
 
-负责将 MongoDB 的 PersonalEventLog 文档转换为 Milvus Collection 实体。
-支持个人和群组事件日志。
+负责将 MongoDB 的EventLog文档转换为 Milvus Collection 实体，支持个人与群组。
 """
 
 from typing import Dict, Any
@@ -13,8 +12,8 @@ from core.observation.logger import get_logger
 from infra_layer.adapters.out.search.milvus.memory.event_log_collection import (
     EventLogCollection,
 )
-from infra_layer.adapters.out.persistence.document.memory.personal_event_log import (
-    PersonalEventLog as MongoPersonalEventLog,
+from infra_layer.adapters.out.persistence.document.memory.event_log_record import (
+    EventLogRecord as MongoEventLogRecord,
 )
 
 logger = get_logger(__name__)
@@ -24,17 +23,17 @@ class EventLogMilvusConverter(BaseMilvusConverter[EventLogCollection]):
     """
     事件日志 Milvus 转换器
     
-    将 MongoDB 的 PersonalEventLog 文档转换为 Milvus Collection 实体。
+    将 MongoDB 的EventLog文档转换为 Milvus Collection 实体。
     使用独立的 EventLogCollection，支持个人和群组事件日志。
     """
 
     @classmethod
-    def from_mongo(cls, source_doc: MongoPersonalEventLog) -> Dict[str, Any]:
+    def from_mongo(cls, source_doc: MongoEventLogRecord) -> Dict[str, Any]:
         """
-        从 MongoDB PersonalEventLog 文档转换为 Milvus Collection 实体
+        从 MongoDB EventLog 文档转换为 Milvus Collection 实体
 
         Args:
-            source_doc: MongoDB 的 PersonalEventLog 文档实例
+            source_doc: MongoDB 的 EventLog 文档实例
 
         Returns:
             Dict[str, Any]: Milvus 实体字典，可直接用于插入
@@ -53,14 +52,22 @@ class EventLogMilvusConverter(BaseMilvusConverter[EventLogCollection]):
             # 构建搜索内容
             search_content = cls._build_search_content(source_doc)
             
+            # 生成 ID (Milvus 主键不能为空)
+            if source_doc.id:
+                event_id = str(source_doc.id)
+            else:
+                import uuid
+                event_id = f"evt_{uuid.uuid4().hex}"
+                logger.warning(f"MongoDB 文档缺少 id,生成临时 ID: {event_id}")
+            
             # 创建 Milvus 实体字典
             milvus_entity = {
                 # 基础标识字段
-                "id": str(source_doc.id) if source_doc.id else "",
-                "user_id": source_doc.user_id,
+                "id": event_id,
+                "user_id": source_doc.user_id or "",
                 "group_id": source_doc.group_id or "",
                 "participants": source_doc.participants if source_doc.participants else [],
-                "parent_episode_id": source_doc.parent_episode_id,
+                "parent_episode_id": source_doc.parent_episode_id or "",
                 # 事件类型和时间字段
                 "event_type": source_doc.event_type or "conversation",
                 "timestamp": timestamp,
@@ -87,11 +94,11 @@ class EventLogMilvusConverter(BaseMilvusConverter[EventLogCollection]):
             return milvus_entity
 
         except Exception as e:
-            logger.error("从 MongoDB PersonalEventLog 文档转换为 Milvus 实体失败: %s", e)
+            logger.error("从 MongoDB EventLog 文档转换为 Milvus 实体失败: %s", e)
             raise
 
     @classmethod
-    def _build_detail(cls, source_doc: MongoPersonalEventLog) -> Dict[str, Any]:
+    def _build_detail(cls, source_doc: MongoEventLogRecord) -> Dict[str, Any]:
         """构建详细信息字典"""
         detail = {
             "vector_model": source_doc.vector_model,
@@ -102,7 +109,7 @@ class EventLogMilvusConverter(BaseMilvusConverter[EventLogCollection]):
         return {k: v for k, v in detail.items() if v is not None}
 
     @staticmethod
-    def _build_search_content(source_doc: MongoPersonalEventLog) -> str:
+    def _build_search_content(source_doc: MongoEventLogRecord) -> str:
         """构建搜索内容（JSON 列表格式）"""
         text_content = []
         

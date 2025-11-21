@@ -1,7 +1,7 @@
 """
-PersonalSemanticMemory Repository
+SemanticMemoryRecord Repository
 
-提供个人语义记忆的 CRUD 操作和查询功能。
+提供通用语义记忆的 CRUD 操作和查询功能。
 """
 
 from datetime import datetime
@@ -11,15 +11,15 @@ from bson import ObjectId
 from core.observation.logger import get_logger
 from core.di.decorators import repository
 from core.oxm.mongo.base_repository import BaseRepository
-from infra_layer.adapters.out.persistence.document.memory.personal_semantic_memory import (
-    PersonalSemanticMemory,
+from infra_layer.adapters.out.persistence.document.memory.semantic_memory_record import (
+    SemanticMemoryRecord,
 )
 
 logger = get_logger(__name__)
 
 
-@repository("personal_semantic_memory_raw_repository", primary=True)
-class PersonalSemanticMemoryRawRepository(BaseRepository[PersonalSemanticMemory]):
+@repository("semantic_memory_record_repository", primary=True)
+class SemanticMemoryRecordRawRepository(BaseRepository[SemanticMemoryRecord]):
     """
     个人语义记忆原始数据仓库
     
@@ -28,15 +28,15 @@ class PersonalSemanticMemoryRawRepository(BaseRepository[PersonalSemanticMemory]
     """
 
     def __init__(self):
-        super().__init__(PersonalSemanticMemory)
+        super().__init__(SemanticMemoryRecord)
 
     # ==================== 基础 CRUD 方法 ====================
 
     async def save(
         self,
-        semantic_memory: PersonalSemanticMemory,
+        semantic_memory: SemanticMemoryRecord,
         session: Optional[AsyncIOMotorClientSession] = None,
-    ) -> Optional[PersonalSemanticMemory]:
+    ) -> Optional[SemanticMemoryRecord]:
         """
         保存个人语义记忆
         
@@ -45,7 +45,7 @@ class PersonalSemanticMemoryRawRepository(BaseRepository[PersonalSemanticMemory]
             session: 可选的 MongoDB 会话，用于事务支持
             
         Returns:
-            保存的 PersonalSemanticMemory 或 None
+            保存的 SemanticMemoryRecord 或 None
         """
         try:
             await semantic_memory.insert(session=session)
@@ -64,7 +64,7 @@ class PersonalSemanticMemoryRawRepository(BaseRepository[PersonalSemanticMemory]
         self,
         memory_id: str,
         session: Optional[AsyncIOMotorClientSession] = None,
-    ) -> Optional[PersonalSemanticMemory]:
+    ) -> Optional[SemanticMemoryRecord]:
         """
         根据ID获取个人语义记忆
         
@@ -73,7 +73,7 @@ class PersonalSemanticMemoryRawRepository(BaseRepository[PersonalSemanticMemory]
             session: 可选的 MongoDB 会话，用于事务支持
             
         Returns:
-            PersonalSemanticMemory 或 None
+            SemanticMemoryRecord 或 None
         """
         try:
             object_id = ObjectId(memory_id)
@@ -91,7 +91,7 @@ class PersonalSemanticMemoryRawRepository(BaseRepository[PersonalSemanticMemory]
         self,
         parent_episode_id: str,
         session: Optional[AsyncIOMotorClientSession] = None,
-    ) -> List[PersonalSemanticMemory]:
+    ) -> List[SemanticMemoryRecord]:
         """
         根据父情景记忆ID获取所有语义记忆
         
@@ -100,7 +100,7 @@ class PersonalSemanticMemoryRawRepository(BaseRepository[PersonalSemanticMemory]
             session: 可选的 MongoDB 会话，用于事务支持
             
         Returns:
-            PersonalSemanticMemory 列表
+            SemanticMemoryRecord 列表
         """
         try:
             results = await self.model.find(
@@ -122,7 +122,7 @@ class PersonalSemanticMemoryRawRepository(BaseRepository[PersonalSemanticMemory]
         limit: Optional[int] = None,
         skip: Optional[int] = None,
         session: Optional[AsyncIOMotorClientSession] = None,
-    ) -> List[PersonalSemanticMemory]:
+    ) -> List[SemanticMemoryRecord]:
         """
         根据用户ID获取语义记忆列表
         
@@ -133,7 +133,7 @@ class PersonalSemanticMemoryRawRepository(BaseRepository[PersonalSemanticMemory]
             session: 可选的 MongoDB 会话，用于事务支持
             
         Returns:
-            PersonalSemanticMemory 列表
+            SemanticMemoryRecord 列表
         """
         try:
             query = self.model.find({"user_id": user_id}, session=session)
@@ -216,5 +216,5 @@ class PersonalSemanticMemoryRawRepository(BaseRepository[PersonalSemanticMemory]
 
 
 # 导出
-__all__ = ["PersonalSemanticMemoryRawRepository"]
+__all__ = ["SemanticMemoryRecordRawRepository"]
 

@@ -9,40 +9,11 @@ from core.oxm.es.analyzer import (
 )
 
 
-class EpisodicMemoryDoc(AliasDoc("episodic-memory", number_of_shards=3)):
+class EventLogDoc(AliasDoc("event-log", number_of_shards=3)):
     """
-    情景记忆Elasticsearch文档
-
-    基于MongoDB EpisodicMemory模型，用于高效的BM25文本检索。
-    主要检索字段为title和episode的拼接内容。
-
-    字段说明：
-    - event_id: 事件唯一标识（对应MongoDB的_id）
-    - user_id: 用户ID（必需，用于过滤）
-    - user_name: 用户名称
-    - timestamp: 事件发生时间
-    - title: 事件标题（对应MongoDB的subject字段）
-    - episode: 情景描述（核心内容）
-    - search_content: BM25搜索字段（支持多值存储，用于精确词匹配）
-    - summary: 事件摘要
-    - group_id: 群组ID（可选）
-    - participants: 参与者列表
-    - type: 事件类型（Conversation等）
-    - keywords: 关键词列表
-    - linked_entities: 关联实体ID列表
-    - extend: 扩展字段（灵活存储）
-
-    分词处理说明：
-    - 应用层负责中文分词（推荐使用jieba）
-    - title、episode、summary字段存储预分词结果（空格分隔）
-    - search_content字段支持多值存储，每个值是一个搜索词
-    - ES使用standard分析器处理search_content，original子字段用于精确匹配
-    - 搜索时使用terms查询在search_content.original字段中匹配多个词
-
-    附属字段说明：
-    - original: 精确匹配，小写处理
-    - ik: IK智能分词（需要ES安装IK插件）
-    - edge_completion: 前缀匹配和自动补全
+    事件日志 Elasticsearch 文档
+    
+    使用独立的 event-log 索引。
     """
 
     ID_SOURCE_FIELD = "event_id"
@@ -62,7 +33,6 @@ class EpisodicMemoryDoc(AliasDoc("episodic-memory", number_of_shards=3)):
         search_analyzer=whitespace_lowercase_trim_stop_analyzer,
         fields={
             "keyword": e_field.Keyword(),  # 精确匹配
-            # "completion": e_field.Completion(analyzer=completion_analyzer),  # 自动补全
         },
     )
 
@@ -71,6 +41,13 @@ class EpisodicMemoryDoc(AliasDoc("episodic-memory", number_of_shards=3)):
         analyzer=whitespace_lowercase_trim_stop_analyzer,
         search_analyzer=whitespace_lowercase_trim_stop_analyzer,
         fields={"keyword": e_field.Keyword()},  # 精确匹配
+    )
+
+    atomic_fact = e_field.Text(
+        required=True,
+        analyzer=whitespace_lowercase_trim_stop_analyzer,
+        search_analyzer=whitespace_lowercase_trim_stop_analyzer,
+        fields={"keyword": e_field.Keyword()},
     )
 
     # BM25检索核心字段 - 支持多值存储的搜索内容
@@ -85,16 +62,6 @@ class EpisodicMemoryDoc(AliasDoc("episodic-memory", number_of_shards=3)):
             "original": e_field.Text(
                 analyzer=lower_keyword_analyzer, search_analyzer=lower_keyword_analyzer
             ),
-            # # IK智能分词字段 - 需要安装IK插件
-            # "ik": e_field.Text(
-            #     analyzer="ik_smart",
-            #     search_analyzer="ik_smart"
-            # ),
-            # 边缘N-gram字段 - 用于前缀匹配和自动补全
-            # "edge_completion": e_field.Text(
-            #     analyzer=edge_analyzer,
-            #     search_analyzer=lower_keyword_analyzer
-            # ),
         },
     )
 
@@ -122,3 +89,4 @@ class EpisodicMemoryDoc(AliasDoc("episodic-memory", number_of_shards=3)):
     # 审计字段
     created_at = e_field.Date()
     updated_at = e_field.Date()
+

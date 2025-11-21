@@ -17,6 +17,7 @@ from core.observation.logger import get_logger
 from common_utils.datetime_utils import get_now_with_timezone
 from common_utils.text_utils import SmartTextParser
 from core.di.decorators import repository
+from memory_layer.memory_scope import MemoryScope
 
 logger = get_logger(__name__)
 
@@ -181,6 +182,7 @@ class EpisodicMemoryEsRepository(BaseRepository[EpisodicMemoryDoc]):
         from_: int = 0,
         explain: bool = False,
         participant_user_id: Optional[str] = None,
+        memory_scope: MemoryScope = MemoryScope.ALL,
     ) -> Dict[str, Any]:
         """
         使用 elasticsearch-dsl 的统一搜索接口，支持多词查询和全面过滤
@@ -239,23 +241,20 @@ class EpisodicMemoryEsRepository(BaseRepository[EpisodicMemoryDoc]):
 
             # 构建过滤条件
             filter_queries = []
-            # 限定只返回 episode 文档（个人/群组），兼容旧文档缺少 type 的情况
-            valid_episode_types = ["episode", "personal_episode", "group_episode"]
-            filter_queries.append(
-                Q(
-                    "bool",
-                    should=[
-                        Q("terms", type=valid_episode_types),
-                        Q("bool", must_not=Q("exists", field="type")),
-                    ],
-                    minimum_should_match=1,
-                )
-            )
-            if user_id is not None:  # 使用 is not None 而不是 truthy 检查，支持空字符串
-                if user_id:  # 非空字符串：个人记忆
+            
+            # 根据 memory_scope 处理 user_id 过滤
+            if memory_scope == MemoryScope.PERSONAL:
+                # 个人记忆: user_id != ""
+                if user_id:
                     filter_queries.append(Q("term", user_id=user_id))
-                else:  # 空字符串：群组记忆
-                    filter_queries.append(Q("term", user_id=""))
+                else:
+                    # 如果没有传 user_id,则过滤所有非空 user_id
+                    filter_queries.append(Q("bool", must_not=Q("term", user_id="")))
+            elif memory_scope == MemoryScope.GROUP:
+                # 群组记忆: user_id == ""
+                filter_queries.append(Q("term", user_id=""))
+            # else: MemoryScope.ALL - 不过滤 user_id
+            
             if participant_user_id:
                 filter_queries.append(Q("term", participants=participant_user_id))
             if group_id:

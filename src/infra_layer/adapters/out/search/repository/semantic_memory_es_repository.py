@@ -10,19 +10,20 @@ import pprint
 from typing import List, Optional, Dict, Any
 from elasticsearch.dsl import Q
 from core.oxm.es.base_repository import BaseRepository
-from infra_layer.adapters.out.search.elasticsearch.memory.episodic_memory import (
-    EpisodicMemoryDoc,
+from infra_layer.adapters.out.search.elasticsearch.memory.semantic_memory import (
+    SemanticMemoryDoc,
 )
 from core.observation.logger import get_logger
 from common_utils.datetime_utils import get_now_with_timezone
 from common_utils.text_utils import SmartTextParser
 from core.di.decorators import repository
+from memory_layer.memory_scope import MemoryScope
 
 logger = get_logger(__name__)
 
 
 @repository("semantic_memory_es_repository", primary=True)
-class SemanticMemoryEsRepository(BaseRepository[EpisodicMemoryDoc]):
+class SemanticMemoryEsRepository(BaseRepository[SemanticMemoryDoc]):
     """
     语义记忆 Elasticsearch 仓库
 
@@ -37,7 +38,7 @@ class SemanticMemoryEsRepository(BaseRepository[EpisodicMemoryDoc]):
 
     def __init__(self):
         """初始化语义记忆仓库"""
-        super().__init__(EpisodicMemoryDoc)
+        super().__init__(SemanticMemoryDoc)
         # 初始化智能文本解析器，用于计算查询词的智能长度
         self._text_parser = SmartTextParser()
 
@@ -79,8 +80,10 @@ class SemanticMemoryEsRepository(BaseRepository[EpisodicMemoryDoc]):
 
     async def create_and_save_semantic_memory(
         self,
-        memory_id: str,
+        event_id: str,
         user_id: str,
+        user_name: str,
+        group_name: str,
         timestamp: datetime,
         content: str,
         search_content: List[str],
@@ -94,7 +97,7 @@ class SemanticMemoryEsRepository(BaseRepository[EpisodicMemoryDoc]):
         extend: Optional[Dict[str, Any]] = None,
         created_at: Optional[datetime] = None,
         updated_at: Optional[datetime] = None,
-    ) -> EpisodicMemoryDoc:
+    ) -> SemanticMemoryDoc:
         """
         创建并保存语义记忆文档
 
@@ -116,7 +119,7 @@ class SemanticMemoryEsRepository(BaseRepository[EpisodicMemoryDoc]):
             updated_at: 更新时间
 
         Returns:
-            已保存的EpisodicMemoryDoc实例
+            已保存的SemanticMemoryDoc实例
         """
         try:
             # 设置默认时间戳
@@ -136,21 +139,20 @@ class SemanticMemoryEsRepository(BaseRepository[EpisodicMemoryDoc]):
                 "evidence": evidence,
             })
 
-            # 创建文档实例（复用 EpisodicMemoryDoc）
-            doc = EpisodicMemoryDoc(
-                event_id=memory_id,
-                type="semantic_memory",  # 标记类型
+            # 创建文档实例
+            doc = SemanticMemoryDoc(
+                event_id=event_id,
+                type='Conversation',
                 user_id=user_id,
-                user_name='',
+                user_name=user_name or '',
                 timestamp=timestamp,
-                title='',
-                episode=content,  # 将 content 存储在 episode 字段
+                semantic=content,
                 search_content=search_content,
-                summary=evidence or '',  # 将 evidence 存储在 summary 字段
+                evidence=evidence or '',
                 group_id=group_id,
+                group_name=group_name or '',
                 participants=participants or [],
                 keywords=[],
-                linked_entities=[],
                 subject='',
                 memcell_event_id_list=[],
                 extend=semantic_extend,
@@ -163,12 +165,12 @@ class SemanticMemoryEsRepository(BaseRepository[EpisodicMemoryDoc]):
             await doc.save(using=client)
 
             logger.debug(
-                "✅ 创建语义记忆文档成功: memory_id=%s, user_id=%s", memory_id, user_id
+                "✅ 创建语义记忆文档成功: event_id=%s, user_id=%s", event_id, user_id
             )
             return doc
 
         except Exception as e:
-            logger.error("❌ 创建语义记忆文档失败: memory_id=%s, error=%s", memory_id, e)
+            logger.error("❌ 创建语义记忆文档失败: event_id=%s, error=%s", event_id, e)
             raise
 
     # ==================== 搜索功能 ====================
@@ -185,6 +187,7 @@ class SemanticMemoryEsRepository(BaseRepository[EpisodicMemoryDoc]):
         explain: bool = False,
         participant_user_id: Optional[str] = None,
         current_time: Optional[datetime] = None,
+        memory_scope: MemoryScope = MemoryScope.ALL,
     ) -> Dict[str, Any]:
         """
         使用 elasticsearch-dsl 的统一搜索接口，支持多词查询和全面过滤
@@ -209,21 +212,24 @@ class SemanticMemoryEsRepository(BaseRepository[EpisodicMemoryDoc]):
         """
         try:
             # 创建 AsyncSearch 对象
-            search = EpisodicMemoryDoc.search()
+            search = SemanticMemoryDoc.search()
 
             # 构建过滤条件
             filter_queries = []
             
-            # ⚠️ 核心：只检索 type="semantic_memory" 的文档
-            filter_queries.append(Q("term", type="semantic_memory"))
-            
-            if user_id is not None:  # 使用 is not None 而不是 truthy 检查，支持空字符串
-                if user_id:  # 非空字符串：个人记忆
+            # 根据 memory_scope 处理 user_id 过滤
+            if memory_scope == MemoryScope.PERSONAL:
+                # 个人记忆: user_id != ""
+                if user_id:
                     filter_queries.append(Q("term", user_id=user_id))
-                else:  # 空字符串：群组记忆
-                    filter_queries.append(Q("term", user_id=""))
-            if participant_user_id:
-                filter_queries.append(Q("term", participants=participant_user_id))
+                else:
+                    # 如果没有传 user_id,则过滤所有非空 user_id
+                    filter_queries.append(Q("bool", must_not=Q("term", user_id="")))
+            elif memory_scope == MemoryScope.GROUP:
+                # 群组记忆: user_id == ""
+                filter_queries.append(Q("term", user_id=""))
+            # else: MemoryScope.ALL - 不过滤 user_id
+            
             if group_id:
                 filter_queries.append(Q("term", group_id=group_id))
             if keywords:

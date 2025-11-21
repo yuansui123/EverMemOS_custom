@@ -16,6 +16,7 @@ from infra_layer.adapters.out.search.milvus.memory.semantic_memory_collection im
 from core.observation.logger import get_logger
 from common_utils.datetime_utils import get_now_with_timezone
 from core.di.decorators import repository
+from memory_layer.memory_scope import MemoryScope
 
 logger = get_logger(__name__)
 
@@ -44,10 +45,10 @@ class SemanticMemoryMilvusRepository(
         super().__init__(SemanticMemoryCollection)
 
     # ==================== 文档创建和管理 ====================
-
+# TODO:添加 username 
     async def create_and_save_semantic_memory(
         self,
-        memory_id: str,
+        event_id: str,
         user_id: Optional[str],
         content: str,
         parent_episode_id: str,
@@ -72,7 +73,7 @@ class SemanticMemoryMilvusRepository(
             user_id: 用户ID（必需）
             content: 语义记忆内容（必需）
             parent_episode_id: 父情景记忆ID（必需）
-            vector: 文本向量（必需，维度必须为1024）
+            vector: 文本向量（必需）
             group_id: 群组ID
             participants: 相关参与者列表
             start_time: 语义记忆开始时间
@@ -110,7 +111,7 @@ class SemanticMemoryMilvusRepository(
 
             # 准备实体数据
             entity = {
-                "id": memory_id,
+                "id": event_id,
                 "vector": vector,
                 "user_id": user_id or "",
                 "group_id": group_id or "",
@@ -132,12 +133,12 @@ class SemanticMemoryMilvusRepository(
 
             logger.debug(
                 "✅ 创建个人语义记忆文档成功: memory_id=%s, user_id=%s",
-                memory_id,
+                event_id,
                 user_id,
             )
 
             return {
-                "memory_id": memory_id,
+                "event_id": event_id,
                 "user_id": user_id,
                 "content": content,
                 "parent_episode_id": parent_episode_id,
@@ -146,7 +147,7 @@ class SemanticMemoryMilvusRepository(
             }
 
         except Exception as e:
-            logger.error("❌ 创建个人语义记忆文档失败: memory_id=%s, error=%s", memory_id, e)
+            logger.error("❌ 创建个人语义记忆文档失败: event_id=%s, error=%s", event_id, e)
             raise
 
     # ==================== 搜索功能 ====================
@@ -164,6 +165,7 @@ class SemanticMemoryMilvusRepository(
         score_threshold: float = 0.0,
         radius: Optional[float] = None,
         participant_user_id: Optional[str] = None,
+        memory_scope: MemoryScope = MemoryScope.ALL,
     ) -> List[Dict[str, Any]]:
         """
         向量相似性搜索
@@ -180,6 +182,7 @@ class SemanticMemoryMilvusRepository(
             score_threshold: 相似度阈值
             radius: COSINE 相似度阈值（可选，默认使用 MILVUS_SIMILARITY_RADIUS）
             participant_user_id: 群组检索时额外要求参与者包含该用户
+            memory_scope: 记忆范围 ("all" | "personal" | "group")
 
         Returns:
             搜索结果列表
@@ -187,11 +190,20 @@ class SemanticMemoryMilvusRepository(
         try:
             # 构建过滤表达式
             filter_expr = []
-            if user_id is not None:  # 使用 is not None 而不是 truthy 检查，支持空字符串
-                if user_id:  # 非空字符串：个人记忆
+            
+            # 根据 memory_scope 处理 user_id 过滤
+            if memory_scope == MemoryScope.PERSONAL:
+                # 个人记忆: user_id != ""
+                if user_id:
                     filter_expr.append(f'user_id == "{user_id}"')
-                else:  # 空字符串：群组记忆
-                    filter_expr.append('user_id == ""')
+                else:
+                    # 如果没有传 user_id,则过滤所有非空 user_id
+                    filter_expr.append('user_id != ""')
+            elif memory_scope == MemoryScope.GROUP:
+                # 群组记忆: user_id == ""
+                filter_expr.append('user_id == ""')
+            # else: MemoryScope.ALL - 不过滤 user_id
+            
             if participant_user_id:
                 filter_expr.append(
                     f'array_contains(participants, "{participant_user_id}")'
@@ -225,8 +237,13 @@ class SemanticMemoryMilvusRepository(
                     "ef": ef_value,
                 }
             }
-            if similarity_radius is not None:
-                search_params["params"]["radius"] = similarity_radius  # 相似度阈值
+            # 不设置 radius 参数!
+            # Milvus 的 radius 是相似度下限,设置过低的值反而可能导致问题
+            # 只在明确指定且 > -1.0 时才设置
+            if radius is not None and radius > -1.0:
+                search_params["params"]["radius"] = radius
+            elif similarity_radius is not None and similarity_radius > -1.0:
+                search_params["params"]["radius"] = similarity_radius
 
             results = await self.collection.search(
                 data=[query_vector],
@@ -239,6 +256,13 @@ class SemanticMemoryMilvusRepository(
 
             # 处理结果
             search_results = []
+            raw_hit_count = sum(len(hits) for hits in results)
+            logger.info(
+                f"Milvus 原始返回: {raw_hit_count} 条结果, "
+                f"limit={limit}, filter_str={filter_str}, "
+                f"memory_scope={memory_scope}"
+            )
+            
             for hits in results:
                 for hit in hits:
                     if hit.score >= score_threshold:

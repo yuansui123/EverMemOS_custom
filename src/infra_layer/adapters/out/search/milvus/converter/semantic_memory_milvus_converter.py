@@ -1,8 +1,7 @@
 """
 语义记忆 Milvus 转换器
 
-负责将 MongoDB 的 PersonalSemanticMemory 文档转换为 Milvus Collection 实体。
-支持个人和群组语义记忆。
+负责将 MongoDB 的语义记忆文档转换为 Milvus Collection 实体，支持个人与群组。
 """
 
 from typing import Dict, Any
@@ -14,8 +13,8 @@ from core.observation.logger import get_logger
 from infra_layer.adapters.out.search.milvus.memory.semantic_memory_collection import (
     SemanticMemoryCollection,
 )
-from infra_layer.adapters.out.persistence.document.memory.personal_semantic_memory import (
-    PersonalSemanticMemory as MongoPersonalSemanticMemory,
+from infra_layer.adapters.out.persistence.document.memory.semantic_memory_record import (
+    SemanticMemoryRecord as MongoSemanticMemoryRecord,
 )
 
 logger = get_logger(__name__)
@@ -25,17 +24,17 @@ class SemanticMemoryMilvusConverter(BaseMilvusConverter[SemanticMemoryCollection
     """
     语义记忆 Milvus 转换器
     
-    将 MongoDB 的 PersonalSemanticMemory 文档转换为 Milvus Collection 实体。
+    将 MongoDB 的语义记忆文档转换为 Milvus Collection 实体。
     使用独立的 SemanticMemoryCollection，支持个人和群组语义记忆。
     """
 
     @classmethod
-    def from_mongo(cls, source_doc: MongoPersonalSemanticMemory) -> Dict[str, Any]:
+    def from_mongo(cls, source_doc: MongoSemanticMemoryRecord) -> Dict[str, Any]:
         """
-        从 MongoDB PersonalSemanticMemory 文档转换为 Milvus Collection 实体
+        从 MongoDB 语义记忆文档转换为 Milvus Collection 实体
 
         Args:
-            source_doc: MongoDB 的 PersonalSemanticMemory 文档实例
+            source_doc: MongoDB 语义记忆文档实例
 
         Returns:
             Dict[str, Any]: Milvus 实体字典，可直接用于插入
@@ -65,14 +64,22 @@ class SemanticMemoryMilvusConverter(BaseMilvusConverter[SemanticMemoryCollection
             # 构建搜索内容
             search_content = cls._build_search_content(source_doc)
             
+            # 生成 ID (Milvus 主键不能为空)
+            if source_doc.id:
+                semantic_id = str(source_doc.id)
+            else:
+                import uuid
+                semantic_id = f"sem_{uuid.uuid4().hex}"
+                logger.warning(f"MongoDB 文档缺少 id,生成临时 ID: {semantic_id}")
+            
             # 创建 Milvus 实体字典
             milvus_entity = {
                 # 基础标识字段
-                "id": str(source_doc.id) if source_doc.id else "",
-                "user_id": source_doc.user_id,
+                "id": semantic_id,
+                "user_id": source_doc.user_id or "",
                 "group_id": source_doc.group_id or "",
                 "participants": source_doc.participants if source_doc.participants else [],
-                "parent_episode_id": source_doc.parent_episode_id,
+                "parent_episode_id": source_doc.parent_episode_id or "",
                 # 时间字段
                 "start_time": start_time,
                 "end_time": end_time,
@@ -101,11 +108,11 @@ class SemanticMemoryMilvusConverter(BaseMilvusConverter[SemanticMemoryCollection
             return milvus_entity
 
         except Exception as e:
-            logger.error("从 MongoDB PersonalSemanticMemory 文档转换为 Milvus 实体失败: %s", e)
+            logger.error("从 MongoDB 语义记忆文档转换为 Milvus 实体失败: %s", e)
             raise
 
     @classmethod
-    def _build_detail(cls, source_doc: MongoPersonalSemanticMemory) -> Dict[str, Any]:
+    def _build_detail(cls, source_doc: MongoSemanticMemoryRecord) -> Dict[str, Any]:
         """构建详细信息字典"""
         detail = {
             "vector_model": source_doc.vector_model,
@@ -116,7 +123,7 @@ class SemanticMemoryMilvusConverter(BaseMilvusConverter[SemanticMemoryCollection
         return {k: v for k, v in detail.items() if v is not None}
 
     @staticmethod
-    def _build_search_content(source_doc: MongoPersonalSemanticMemory) -> str:
+    def _build_search_content(source_doc: MongoSemanticMemoryRecord) -> str:
         """构建搜索内容（JSON 列表格式）"""
         text_content = []
         

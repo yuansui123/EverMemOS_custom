@@ -256,7 +256,7 @@ class ConversationDataRepositoryImpl(ConversationDataRepository):
             redis_key = self._get_redis_key(group_id)
 
             # 使用缓存管理器删除整个键
-            success = await cache_manager.delete(redis_key)
+            success = await cache_manager.clear_queue(redis_key)
 
             if success:
                 logger.info("成功删除对话数据: group_id=%s", group_id)

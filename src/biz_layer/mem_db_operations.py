@@ -59,7 +59,12 @@ from common_utils.datetime_utils import (
     from_timestamp,
 )
 from core.observation.logger import get_logger
-
+from infra_layer.adapters.out.persistence.document.memory.semantic_memory_record import (
+    SemanticMemoryRecord,
+)
+from infra_layer.adapters.out.persistence.document.memory.event_log_record import (
+    EventLogRecord,
+)
 logger = get_logger(__name__)
 
 # ==================== 时间处理函数 ====================
@@ -270,8 +275,10 @@ def _convert_episode_memory_to_doc(
             timestamp_dt = current_time
 
     return EpisodicMemory(
-        user_id=episode_memory.user_id,
+        user_id=episode_memory.user_id or "",
+        user_name=episode_memory.user_name or '',
         group_id=episode_memory.group_id,
+        group_name=episode_memory.group_name,
         timestamp=timestamp_dt,
         participants=episode_memory.participants,
         summary=episode_memory.summary or "",
@@ -298,9 +305,9 @@ def _convert_semantic_memory_to_doc(
     semantic_memory: Any,
     parent_doc: EpisodicMemory,
     current_time: Optional[datetime] = None,
-) -> "PersonalSemanticMemory":
+) -> SemanticMemoryRecord:
     """
-    将SemanticMemoryItem业务对象转换为PersonalSemanticMemory数据库文档格式
+    将SemanticMemoryItem业务对象转换为统一语义记忆文档格式
 
     Args:
         semantic_memory: 业务层的SemanticMemoryItem对象
@@ -308,23 +315,27 @@ def _convert_semantic_memory_to_doc(
         current_time: 当前时间
 
     Returns:
-        PersonalSemanticMemory: 数据库文档格式的个人语义记忆对象
+        SemanticMemoryRecord: 数据库文档格式的语义记忆对象
     """
-    from infra_layer.adapters.out.persistence.document.memory.personal_semantic_memory import (
-        PersonalSemanticMemory,
-    )
+    
 
     if current_time is None:
         current_time = get_now_with_timezone()
 
-    return PersonalSemanticMemory(
-        user_id=semantic_memory.user_id,
+    return SemanticMemoryRecord(
+        user_id=getattr(semantic_memory, "user_id", None),
+        user_name=getattr(
+            semantic_memory, "user_name", getattr(parent_doc, "user_name", None)
+        ),
         content=semantic_memory.content,
         parent_episode_id=str(parent_doc.event_id),
         start_time=semantic_memory.start_time,
         end_time=semantic_memory.end_time,
         duration_days=semantic_memory.duration_days,
         group_id=semantic_memory.group_id,
+        group_name=getattr(
+            semantic_memory, "group_name", getattr(parent_doc, "group_name", None)
+        ),
         participants=parent_doc.participants,
         vector=semantic_memory.embedding,
         vector_model=getattr(semantic_memory, 'vector_model', None),
@@ -335,9 +346,9 @@ def _convert_semantic_memory_to_doc(
 
 def _convert_event_log_to_docs(
     event_log: Any, parent_doc: EpisodicMemory, current_time: Optional[datetime] = None
-) -> List["PersonalEventLog"]:
+) -> List["EventLogRecord"]:
     """
-    将EventLog业务对象转换为PersonalEventLog数据库文档格式列表
+    将EventLog业务对象转换为通用事件日志文档列表
 
     Args:
         event_log: 业务层的EventLog对象
@@ -345,16 +356,12 @@ def _convert_event_log_to_docs(
         current_time: 当前时间
 
     Returns:
-        List[PersonalEventLog]: 数据库文档格式的个人事件日志对象列表
+        List[EventLogRecord]: 数据库文档格式的事件日志对象列表
     """
-    from infra_layer.adapters.out.persistence.document.memory.personal_event_log import (
-        PersonalEventLog,
-    )
-
     if current_time is None:
         current_time = get_now_with_timezone()
 
-    docs = []
+    docs: List[EventLogRecord] = []
     if not event_log.atomic_fact or not event_log.fact_embeddings:
         return docs
 
@@ -366,12 +373,16 @@ def _convert_event_log_to_docs(
         if hasattr(vector, 'tolist'):
             vector = vector.tolist()
 
-        doc = PersonalEventLog(
+        doc = EventLogRecord(
             user_id=event_log.user_id,
+            user_name=event_log.user_name or '',
             atomic_fact=fact,
             parent_episode_id=str(parent_doc.event_id),
             timestamp=parent_doc.timestamp or current_time,
-            group_id=event_log.group_id,
+            group_id=getattr(event_log, "group_id", parent_doc.group_id),
+            group_name=getattr(
+                event_log, "group_name", getattr(parent_doc, "group_name", None)
+            ),
             participants=parent_doc.participants,
             vector=vector,
             vector_model=getattr(event_log, 'vector_model', None),
@@ -900,6 +911,7 @@ def _convert_memcell_to_document(
             timestamp=timestamp_dt,  # 直接传入timezone-aware的datetime
             summary=memcell.summary,
             group_id=memcell.group_id,
+            group_name=memcell.group_name,
             original_data=doc_original_data,
             participants=memcell.participants,
             type=doc_type,

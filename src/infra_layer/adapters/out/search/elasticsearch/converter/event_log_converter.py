@@ -1,8 +1,7 @@
 """
 事件日志 ES 转换器
 
-负责将 MongoDB 的 PersonalEventLog 文档转换为 Elasticsearch 的 EpisodicMemoryDoc 文档。
-注意：复用 EpisodicMemoryDoc，通过 type 字段区分为 event_log。
+负责将 MongoDB 的EventLog转换为 Elasticsearch 的 EventLogDoc 文档。
 支持个人和群组事件日志。
 """
 
@@ -12,35 +11,34 @@ import jieba
 from core.oxm.es.base_converter import BaseEsConverter
 from core.observation.logger import get_logger
 from core.nlp.stopwords_utils import filter_stopwords
-from infra_layer.adapters.out.search.elasticsearch.memory.episodic_memory import (
-    EpisodicMemoryDoc,
+from infra_layer.adapters.out.search.elasticsearch.memory.event_log import (
+    EventLogDoc,
 )
-from infra_layer.adapters.out.persistence.document.memory.personal_event_log import (
-    PersonalEventLog as MongoPersonalEventLog,
+from infra_layer.adapters.out.persistence.document.memory.event_log_record import (
+    EventLogRecord as MongoEventLogRecord,
 )
 
 logger = get_logger(__name__)
 
 
-class EventLogConverter(BaseEsConverter[EpisodicMemoryDoc]):
+class EventLogConverter(BaseEsConverter[EventLogDoc]):
     """
     事件日志 ES 转换器
     
-    将 MongoDB 的 PersonalEventLog 文档转换为 Elasticsearch 的 EpisodicMemoryDoc 文档。
-    复用 EpisodicMemoryDoc，通过 type 字段标记为 event_log。
+    将 MongoDB 的事件日志文档转换为 Elasticsearch 的 EventLogDoc 文档。
     支持个人和群组事件日志。
     """
 
     @classmethod
-    def from_mongo(cls, source_doc: MongoPersonalEventLog) -> EpisodicMemoryDoc:
+    def from_mongo(cls, source_doc: MongoEventLogRecord) -> EventLogDoc:
         """
-        从 MongoDB PersonalEventLog 文档转换为 ES EpisodicMemoryDoc 文档
+        从 MongoDB 事件日志文档转换为 ES EventLogDoc 文档
 
         Args:
-            source_doc: MongoDB 的 PersonalEventLog 文档实例
+            source_doc: MongoDB 的事件日志文档实例
 
         Returns:
-            EpisodicMemoryDoc: ES 文档实例
+            EventLogDoc: ES 文档实例
         """
         if source_doc is None:
             raise ValueError("MongoDB 文档不能为空")
@@ -49,23 +47,33 @@ class EventLogConverter(BaseEsConverter[EpisodicMemoryDoc]):
             # 构建搜索内容列表，用于 BM25 检索
             search_content = cls._build_search_content(source_doc)
             
+            # 确保 event_id 不为空
+            event_id = str(source_doc.id) if source_doc.id else None
+            if not event_id:
+                # 兜底逻辑:生成唯一ID
+                import uuid
+                event_id = f"evt_{uuid.uuid4().hex}"
+                logger.warning(f"MongoDB 文档缺少 id,生成临时 ID: {event_id}")
+            
             # 创建 ES 文档实例
-            es_doc = EpisodicMemoryDoc(
+            es_doc = EventLogDoc(
                 # 基础标识字段
-                event_id=str(source_doc.id) if source_doc.id else "",
+                event_id=event_id,
                 user_id=source_doc.user_id,
-                user_name=None,  # 个人事件日志没有 user_name
+                user_name=source_doc.user_name or "",
                 # 时间字段
                 timestamp=source_doc.timestamp,
                 # 核心内容字段 - 使用 atomic_fact 作为 episode
                 title=source_doc.atomic_fact[:50] if source_doc.atomic_fact else "",  # 取前50字符作为标题
                 episode=source_doc.atomic_fact,
+                atomic_fact=source_doc.atomic_fact,
                 search_content=search_content,  # BM25 搜索的核心字段
                 summary=None,
                 # 分类和标签字段
                 group_id=source_doc.group_id,
+                group_name=source_doc.group_name or "",
                 participants=source_doc.participants,
-                type="event_log",  # 标记类型（去除 personal 前缀）
+                type="Conversation",  # 事件类型
                 keywords=None,
                 linked_entities=None,
                 # MongoDB 特有字段
@@ -86,11 +94,11 @@ class EventLogConverter(BaseEsConverter[EpisodicMemoryDoc]):
             return es_doc
 
         except Exception as e:
-            logger.error("从 MongoDB PersonalEventLog 文档转换为 ES 文档失败: %s", e)
+            logger.error("从 MongoDB 事件日志文档转换为 ES 文档失败: %s", e)
             raise
 
     @classmethod
-    def _build_search_content(cls, source_doc: MongoPersonalEventLog) -> List[str]:
+    def _build_search_content(cls, source_doc: MongoEventLogRecord) -> List[str]:
         """
         构建搜索内容列表
         
@@ -101,7 +109,8 @@ class EventLogConverter(BaseEsConverter[EpisodicMemoryDoc]):
         # 分词 atomic_fact
         if source_doc.atomic_fact:
             words = jieba.lcut(source_doc.atomic_fact)
-            words = filter_stopwords(words)
+            # 使用 min_length=2 来保留有意义的词，避免过度过滤
+            words = filter_stopwords(words, min_length=2)
             search_content.extend(words)
         
         # 去重并保持顺序
@@ -111,6 +120,10 @@ class EventLogConverter(BaseEsConverter[EpisodicMemoryDoc]):
             if word not in seen and word.strip():
                 seen.add(word)
                 unique_content.append(word)
+        
+        # 如果过滤后为空，使用原文作为兜底
+        if not unique_content and source_doc.atomic_fact:
+            return [source_doc.atomic_fact]
         
         return unique_content if unique_content else [""]
 

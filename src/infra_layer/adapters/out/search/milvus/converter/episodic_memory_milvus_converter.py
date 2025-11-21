@@ -81,7 +81,7 @@ class EpisodicMemoryMilvusConverter(BaseMilvusConverter[EpisodicMemoryCollection
                     else ""
                 ),
                 # 详细信息 JSON
-                "detail": json.dumps(cls._build_detail(source_doc), ensure_ascii=False),
+                "metadata": json.dumps(cls._build_detail(source_doc), ensure_ascii=False),
                 # 审计字段
                 "created_at": (
                     int(source_doc.created_at.timestamp())

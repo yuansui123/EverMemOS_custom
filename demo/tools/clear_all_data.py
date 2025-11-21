@@ -3,289 +3,333 @@
 可以被其他测试脚本导入使用，也可以独立运行
 """
 import asyncio
-from infra_layer.adapters.out.persistence.document.memory.memcell import MemCell
-from infra_layer.adapters.out.persistence.document.memory.episodic_memory import EpisodicMemory
-from infra_layer.adapters.out.persistence.document.memory.personal_semantic_memory import PersonalSemanticMemory
-from infra_layer.adapters.out.persistence.document.memory.personal_event_log import PersonalEventLog
-from infra_layer.adapters.out.persistence.document.memory.conversation_status import ConversationStatus
-from infra_layer.adapters.out.persistence.document.memory.cluster_state import ClusterState
-from infra_layer.adapters.out.persistence.document.memory.user_profile import UserProfile
-from infra_layer.adapters.out.search.milvus.memory.episodic_memory_collection import EpisodicMemoryCollection
-from infra_layer.adapters.out.search.milvus.memory.semantic_memory_collection import SemanticMemoryCollection
-from infra_layer.adapters.out.search.milvus.memory.event_log_collection import EventLogCollection
+import time
+from typing import Dict, Any, List
+
+from pymilvus import utility, Collection
+
+from infra_layer.adapters.out.search.milvus.memory.episodic_memory_collection import (
+    EpisodicMemoryCollection,
+)
+from infra_layer.adapters.out.search.milvus.memory.semantic_memory_collection import (
+    SemanticMemoryCollection,
+)
+from infra_layer.adapters.out.search.milvus.memory.event_log_collection import (
+    EventLogCollection,
+)
+from infra_layer.adapters.out.search.elasticsearch.memory.episodic_memory import (
+    EpisodicMemoryDoc,
+)
+from infra_layer.adapters.out.search.elasticsearch.memory.semantic_memory import (
+    SemanticMemoryDoc,
+)
+from infra_layer.adapters.out.search.elasticsearch.memory.event_log import (
+    EventLogDoc,
+)
 from core.di import get_bean_by_type
 from component.redis_provider import RedisProvider
+from component.mongodb_client_factory import MongoDBClientFactory
+from component.elasticsearch_client_factory import ElasticsearchClientFactory
 
 
-async def clear_all_memories(verbose: bool = True):
+async def _clear_mongodb(verbose: bool = True) -> Dict[str, Any]:
+    """删除 MongoDB 中所有文档，保留集合和索引"""
+    result: Dict[str, Any] = {
+        "database": None,
+        "collections": {},
+        "deleted": {},
+        "errors": [],
+    }
+    try:
+        mongo_factory = get_bean_by_type(MongoDBClientFactory)
+        client_wrapper = await mongo_factory.get_default_client()
+        db = client_wrapper.database
+        db_name = db.name
+        result["database"] = db_name
+
+        collection_names = await db.list_collection_names()
+        for coll_name in collection_names:
+            if coll_name.startswith("system."):
+                continue
+            collection = db[coll_name]
+            count = await collection.count_documents({})
+            if count == 0:
+                continue
+            delete_result = await collection.delete_many({})
+            deleted = delete_result.deleted_count if delete_result else 0
+            result["collections"][coll_name] = count
+            result["deleted"][coll_name] = deleted
+
+        if verbose:
+            total_deleted = sum(result["deleted"].values())
+            print(
+                f"      ✅ MongoDB '{db_name}': 删除 {total_deleted} 条文档（{len(result['deleted'])} 个集合）"
+            )
+    except Exception as exc:
+        result["errors"].append(str(exc))
+        if verbose:
+            print(f"      ⚠️  MongoDB 清理失败: {exc}")
+
+    return result
+
+
+def _get_milvus_row_count(name: str, coll: Collection) -> int:
+    """获取 Milvus 实时行数（优先 row_count，其次 segment，再兜底 num_entities）"""
+    get_stats = getattr(utility, "get_collection_stats", None)
+    if callable(get_stats):
+        stats_info = get_stats(name)
+        if isinstance(stats_info, dict):
+            try:
+                return int(stats_info.get("row_count", 0))
+            except (ValueError, TypeError):
+                pass
+
+    try:
+        segment_infos = utility.get_query_segment_info(name)
+        if segment_infos:
+            total = 0
+            for seg in segment_infos:
+                seg_rows = getattr(seg, "num_rows", None)
+                if seg_rows is None:
+                    seg_rows = getattr(seg, "row_count", 0)
+                total += int(seg_rows or 0)
+            return total
+    except Exception:
+        pass
+
+    try:
+        return int(coll.num_entities)
+    except Exception:
+        return 0
+
+
+def _clear_milvus(
+    verbose: bool = True,
+    drop_collections: bool = False,
+) -> Dict[str, Any]:
+    """删除 Milvus 集合中的所有向量
+
+    Args:
+        verbose: 是否输出日志
+        drop_collections: 是否直接删除物理集合并重建（彻底清空）
+    """
+    stats: Dict[str, Any] = {"cleared": [], "errors": []}
+    collection_classes = [
+        EpisodicMemoryCollection,
+        SemanticMemoryCollection,
+        EventLogCollection,
+    ]
+    for cls in collection_classes:
+        collection = cls()
+        alias = collection.name
+        try:
+            related_collections: List[str] = []
+            all_collections = utility.list_collections(using=collection.using)
+            prefix = f"{alias}_"
+            for real_name in all_collections:
+                if real_name == alias or real_name.startswith(prefix):
+                    related_collections.append(real_name)
+
+            if not related_collections:
+                continue
+
+            if not drop_collections:
+                for real_name in related_collections:
+                    coll = Collection(name=real_name, using=collection.using)
+                    coll.load()
+                    before_count = coll.num_entities
+                    if before_count == 0:
+                        continue
+                    coll.delete(expr="id != ''")
+                    coll.flush()
+
+            # 删除 alias，防止 drop collection 时报错
+            try:
+                utility.drop_alias(alias, using=collection.using)
+            except Exception:
+                pass
+
+            for real_name in related_collections:
+                before_count = 0
+                try:
+                    coll = Collection(name=real_name, using=collection.using)
+                    coll.load()
+                    before_count = coll.num_entities
+                except Exception:
+                    before_count = 0
+
+                utility.drop_collection(real_name, using=collection.using)
+                stats["cleared"].append(
+                    {"collection": real_name, "deleted": before_count, "dropped": True}
+                )
+                if verbose:
+                    print(f"      ✅ Milvus 删除集合 {real_name}（{before_count} 条向量）")
+
+            # 清空类级别的 collection 缓存，确保重新创建时不会使用旧的实例
+            cls._collection_instance = None
+
+            # 重新创建空集合并关联 alias，避免后续依赖失败
+            try:
+                collection.ensure_all()
+            except Exception as ensure_exc:
+                if verbose:
+                    print(f"      ⚠️  重新创建 Milvus 集合 {alias} 失败: {ensure_exc}")
+        except Exception as exc:  # pylint: disable=broad-except
+            stats["errors"].append(str(exc))
+            if verbose:
+                print(f"      ⚠️  无法清空 Milvus 集合 {alias}: {exc}")
+
+    return stats
+
+
+async def _clear_elasticsearch(
+    verbose: bool = True, rebuild_index: bool = False
+) -> Dict[str, Any]:
+    """删除与记忆相关的 Elasticsearch 文档，必要时重建索引"""
+    stats: Dict[str, Any] = {"cleared": [], "errors": [], "recreated": False}
+    try:
+        es_factory = get_bean_by_type(ElasticsearchClientFactory)
+        es_client_wrapper = await es_factory.get_default_client()
+        es_client = es_client_wrapper.async_client
+
+        alias_names = [
+            EpisodicMemoryDoc._index._name,
+            SemanticMemoryDoc._index._name,
+            EventLogDoc._index._name,
+        ]
+
+        if rebuild_index:
+            for alias in alias_names:
+                try:
+                    existing = await es_client.indices.get_alias(name=alias, ignore=[404])
+                    if isinstance(existing, dict):
+                        for index_name in existing.keys():
+                            await es_client.indices.delete(index=index_name, ignore=[400, 404])
+                            stats["cleared"].append(
+                                {"alias": alias, "deleted_index": index_name}
+                            )
+                            if verbose:
+                                print(f"      ✅ 删除索引: {index_name}")
+                except Exception as inner_exc:
+                    stats["errors"].append(str(inner_exc))
+                    if verbose:
+                        print(f"      ⚠️ 删除索引失败 {alias}: {inner_exc}")
+            for alias in alias_names:
+                await es_client.indices.delete_alias(index="*", name=alias, ignore=[404])
+            es_client_wrapper._initialized = False
+            await es_client_wrapper.initialize_indices(
+                [EpisodicMemoryDoc, SemanticMemoryDoc, EventLogDoc]
+            )
+            stats["recreated"] = True
+            if verbose:
+                print("      ✅ Elasticsearch 索引与别名已重新创建")
+            return stats
+
+        for alias in alias_names:
+            try:
+                exists = await es_client.indices.exists_alias(name=alias)
+                if not exists:
+                    continue
+                count_resp = await es_client.count(index=alias, query={"match_all": {}})
+                total_docs = count_resp.get("count", 0)
+                if total_docs == 0:
+                    continue
+                await es_client.delete_by_query(
+                    index=alias,
+                    query={"match_all": {}},
+                    refresh=True,
+                    conflicts="proceed",
+                )
+                stats["cleared"].append({"alias": alias, "deleted": total_docs})
+                if verbose:
+                    print(f"      ✅ Elasticsearch {alias}: 删除 {total_docs} 条文档")
+            except Exception as inner_exc:  # pylint: disable=broad-except
+                stats["errors"].append(str(inner_exc))
+                if verbose:
+                    print(f"      ⚠️  无法清空 ES {alias}: {inner_exc}")
+
+    except Exception as exc:  # pylint: disable=broad-except
+        stats["errors"].append(str(exc))
+        if verbose:
+            print(f"      ⚠️  Elasticsearch 清理失败: {exc}")
+
+    return stats
+
+
+async def _clear_redis(verbose: bool = True) -> Dict[str, Any]:
+    """清空 Redis 当前数据库"""
+    stats: Dict[str, Any] = {}
+    try:
+        redis_provider = get_bean_by_type(RedisProvider)
+        client = await redis_provider.get_client()
+        await client.flushdb()
+        stats["flushed_db"] = redis_provider.redis_db
+        if verbose:
+            print(f"      ✅ Redis DB {redis_provider.redis_db} 已清空")
+    except Exception as exc:  # pylint: disable=broad-except
+        stats["error"] = str(exc)
+        if verbose:
+            print(f"      ⚠️  Redis 清理失败: {exc}")
+    return stats
+
+
+async def clear_all_memories(
+    verbose: bool = True,
+    rebuild_es: bool = False,
+    drop_milvus: bool = False,
+):
     """清空所有记忆数据（MongoDB、Milvus、Elasticsearch、Redis）
-    
+
     Args:
         verbose: 是否显示详细信息
+        rebuild_es: 是否删除并重建 Elasticsearch 索引 (默认: False)
+        drop_milvus: 是否删除并重建 Milvus 物理集合 (默认: False)
     """
     if verbose:
         print("\n🗑️  清空所有记忆数据...")
     
     try:
-        # 1. 清空 MongoDB
         if verbose:
             print("   📦 清空 MongoDB...")
-        
-        memcell_count = await MemCell.find_all().count()
-        episode_count = await EpisodicMemory.find_all().count()
-        semantic_count = await PersonalSemanticMemory.find_all().count()
-        eventlog_count = await PersonalEventLog.find_all().count()
-        status_count = await ConversationStatus.find_all().count()
-        cluster_count = await ClusterState.find_all().count()
-        profile_count = await UserProfile.find_all().count()
-        
-        await MemCell.find_all().delete()
-        await EpisodicMemory.find_all().delete()
-        await PersonalSemanticMemory.find_all().delete()
-        await PersonalEventLog.find_all().delete()
-        await ConversationStatus.find_all().delete()
-        await ClusterState.find_all().delete()
-        await UserProfile.find_all().delete()
-        
-        if verbose:
-            print(f"      ✅ MemCell: {memcell_count} 条")
-            print(f"      ✅ EpisodicMemory: {episode_count} 条")
-            print(f"      ✅ PersonalSemanticMemory: {semantic_count} 条")
-            print(f"      ✅ PersonalEventLog: {eventlog_count} 条")
-            print(f"      ✅ ConversationStatus: {status_count} 条")
-            print(f"      ✅ ClusterState: {cluster_count} 条")
-            print(f"      ✅ UserProfile: {profile_count} 条")
-        
-        # 2. 清空 Milvus（三个独立的 Collection）
+        mongo_stats = await _clear_mongodb(verbose)
+
         if verbose:
             print("   🔍 清空 Milvus...")
-        
-        # 使用drop并重新创建Collection的方式清空（保留alias）
-        collections_to_clear = [
-            ("episodic_memory", EpisodicMemoryCollection()),
-            ("semantic_memory", SemanticMemoryCollection()),
-            ("event_log", EventLogCollection()),
-        ]
-        
-        for coll_name, milvus_collection in collections_to_clear:
-            try:
-                from pymilvus import utility, Collection
-                alias_name = milvus_collection._alias_name
-                
-                # 检查alias是否存在
-                if utility.has_collection(alias_name, using=milvus_collection._using):
-                    # 获取当前alias指向的真实Collection名称
-                    try:
-                        from pymilvus import connections
-                        conn = connections._fetch_handler(milvus_collection._using)
-                        desc = conn.describe_alias(alias_name)
-                        old_real_name = desc.get("collection_name") if isinstance(desc, dict) else None
-                    except Exception:
-                        old_real_name = None
-                    
-                    if old_real_name:
-                        # 1. 先创建新的Collection
-                        new_coll = milvus_collection.create_new_collection()
-                        if verbose:
-                            print(f"      ✅ {coll_name}: 创建新Collection: {new_coll.name}")
-                        
-                        # 2. 切换alias到新Collection
-                        milvus_collection.switch_alias(new_coll, drop_old=True)
-                        if verbose:
-                            print(f"      ✅ {coll_name}: 已切换alias '{alias_name}' 到新Collection并删除旧Collection '{old_real_name}'")
-                    else:
-                        if verbose:
-                            print(f"      ⚠️  {coll_name}: 无法获取旧Collection名称")
-                else:
-                    if verbose:
-                        print(f"      ✅ {coll_name}: Collection不存在，跳过清空")
-            except Exception as e:
-                if verbose:
-                    print(f"      ⚠️  {coll_name} 清空跳过: {e}")
-        
-        # 3. 清空 Elasticsearch
+        milvus_stats = _clear_milvus(verbose, drop_collections=drop_milvus)
+
         if verbose:
             print("   🔎 清空 Elasticsearch...")
-        
-        try:
-            from component.elasticsearch_client_factory import ElasticsearchClientFactory
-            from infra_layer.adapters.out.search.elasticsearch.memory.episodic_memory import EpisodicMemoryDoc
-            
-            # 获取ES客户端连接
-            es_factory = get_bean_by_type(ElasticsearchClientFactory)
-            es_client_wrapper = await es_factory.get_default_client()
-            es_client = es_client_wrapper.async_client
-            
-            # 获取实际的 alias 名称（带后缀）
-            alias_name = EpisodicMemoryDoc._index._name
-            
-            # 获取alias指向的所有索引
-            alias_info = await es_client.indices.get_alias(name=alias_name)
-            
-            total_deleted = 0
-            # 删除每个索引中的所有文档
-            for index_name in alias_info.keys():
-                # 持续删除直到没有更多文档
-                while True:
-                    response = await es_client.delete_by_query(
-                        index=index_name,
-                        body={"query": {"match_all": {}}},
-                        conflicts="proceed",  # 忽略版本冲突
-                        refresh=True,  # 立即刷新索引
-                        scroll_size=5000,  # 每批处理5000条
-                        wait_for_completion=True  # 等待完成
-                    )
-                    deleted_count = response.get('deleted', 0) if isinstance(response, dict) else 0
-                    total_deleted += deleted_count
-                    
-                    if verbose and deleted_count > 0:
-                        print(f"      - 清空索引 {index_name}: 本轮删除 {deleted_count} 条文档")
-                    
-                    # 如果没有删除任何文档，说明已经清空
-                    if deleted_count == 0:
-                        break
-            
-            if verbose:
-                print(f"      ✅ Elasticsearch 已清空（总计删除 {total_deleted} 条文档）")
-        except Exception as e:
-            if verbose:
-                print(f"      ⚠️  Elasticsearch 清空跳过: {e}")
-        
-        # 4. 清空 Redis
+        es_stats = await _clear_elasticsearch(verbose, rebuild_index=rebuild_es)
+
         if verbose:
             print("   💾 清空 Redis...")
-        
-        redis_provider = get_bean_by_type(RedisProvider)
-        keys = await redis_provider.keys("chat_history:*")
-        if keys:
-            for key in keys:
-                await redis_provider.delete(key)
-            if verbose:
-                print(f"      ✅ Redis 已清空 {len(keys)} 个 chat_history key")
-        else:
-            if verbose:
-                print(f"      ✅ Redis 没有 chat_history 数据")
-        
+        redis_stats = await _clear_redis(verbose)
+
         if verbose:
             print("✅ 所有记忆数据已清空！\n")
-        
-        # 验证清空结果
-        if verbose:
-            print("🔍 验证清空结果...")
-            
-            # 1. 验证 MongoDB
-            remaining_memcell = await MemCell.find_all().count()
-            remaining_episode = await EpisodicMemory.find_all().count()
-            remaining_semantic = await PersonalSemanticMemory.find_all().count()
-            remaining_eventlog = await PersonalEventLog.find_all().count()
-            remaining_status = await ConversationStatus.find_all().count()
-            remaining_cluster = await ClusterState.find_all().count()
-            remaining_profile = await UserProfile.find_all().count()
-            
-            mongodb_total = (remaining_memcell + remaining_episode + remaining_semantic + 
-                           remaining_eventlog + remaining_status + remaining_cluster + remaining_profile)
-            
-            if mongodb_total == 0:
-                print(f"   ✅ MongoDB: 0 条记录")
+            print("📊 简要统计：")
+            total_mongo_deleted = sum(mongo_stats.get("deleted", {}).values())
+            print(
+                f"   - MongoDB 删除文档: {total_mongo_deleted} 条（数据库: {mongo_stats.get('database')}）"
+            )
+            total_milvus_deleted = sum(
+                item["deleted"] for item in milvus_stats.get("cleared", [])
+            )
+            print(f"   - Milvus 删除向量: {total_milvus_deleted} 条")
+            if es_stats.get("recreated"):
+                print("   - Elasticsearch: 索引与别名已重新创建")
             else:
-                print(f"   ⚠️  MongoDB 仍有 {mongodb_total} 条记录:")
-                if remaining_memcell > 0:
-                    print(f"      - MemCell: {remaining_memcell} 条")
-                if remaining_episode > 0:
-                    print(f"      - EpisodicMemory: {remaining_episode} 条")
-                if remaining_semantic > 0:
-                    print(f"      - PersonalSemanticMemory: {remaining_semantic} 条")
-                if remaining_eventlog > 0:
-                    print(f"      - PersonalEventLog: {remaining_eventlog} 条")
-                if remaining_status > 0:
-                    print(f"      - ConversationStatus: {remaining_status} 条")
-                if remaining_cluster > 0:
-                    print(f"      - ClusterState: {remaining_cluster} 条")
-                if remaining_profile > 0:
-                    print(f"      - UserProfile: {remaining_profile} 条")
-            
-            # 2. 验证 Milvus (检查3个Collection中的数据量)
-            try:
-                from pymilvus import utility
-                
-                collections_to_verify = [
-                    ("episodic_memory", EpisodicMemoryCollection()),
-                    ("semantic_memory", SemanticMemoryCollection()),
-                    ("event_log", EventLogCollection()),
-                ]
-                
-                total_milvus_count = 0
-                for coll_name, milvus_collection in collections_to_verify:
-                    try:
-                        alias_name = milvus_collection._alias_name
-                        
-                        # 检查alias是否存在
-                        if utility.has_collection(alias_name):
-                            # Collection存在，查询数量
-                            milvus_collection.ensure_collection_desc()
-                            collection = milvus_collection.async_collection()
-                            count = collection.num_entities
-                            total_milvus_count += count
-                            if count > 0:
-                                print(f"   ⚠️  Milvus {coll_name} 仍有 {count} 条向量")
-                    except Exception as e:
-                        if "can't find collection" not in str(e):
-                            print(f"   ⚠️  Milvus {coll_name} 验证跳过: {e}")
-                
-                if total_milvus_count == 0:
-                    print(f"   ✅ Milvus: 0 条向量")
-            except Exception as e:
-                print(f"   ⚠️  Milvus 验证跳过: {e}")
-            
-            # 3. 验证 Elasticsearch
-            try:
-                from component.elasticsearch_client_factory import ElasticsearchClientFactory
-                from infra_layer.adapters.out.search.elasticsearch.memory.episodic_memory import EpisodicMemoryDoc
-                
-                # 获取ES客户端连接
-                es_factory = get_bean_by_type(ElasticsearchClientFactory)
-                es_client_wrapper = await es_factory.get_default_client()
-                es_client = es_client_wrapper.async_client
-                
-                # 获取实际的 alias 名称（带后缀）
-                actual_alias = EpisodicMemoryDoc._index._name
-                
-                # 直接使用async_client的count API
-                response = await es_client.count(index=actual_alias)
-                es_count = response.get('count', 0) if isinstance(response, dict) else response.get('count', 0) if hasattr(response, 'get') else 0
-                
-                if es_count == 0:
-                    print(f"   ✅ Elasticsearch: 0 条文档")
-                else:
-                    print(f"   ⚠️  Elasticsearch 仍有 {es_count} 条文档")
-            except Exception as e:
-                print(f"   ⚠️  Elasticsearch 验证跳过: {e}")
-            
-            # 4. 验证 Redis
-            redis_provider = get_bean_by_type(RedisProvider)
-            remaining_keys = await redis_provider.keys("chat_history:*")
-            if not remaining_keys:
-                print(f"   ✅ Redis: 0 个 chat_history key")
-            else:
-                print(f"   ⚠️  Redis 仍有 {len(remaining_keys)} 个 chat_history key:")
-                for key in remaining_keys[:5]:  # 最多显示5个
-                    print(f"      - {key}")
-                if len(remaining_keys) > 5:
-                    print(f"      ... 还有 {len(remaining_keys) - 5} 个")
-            
-            print()
+                total_es_deleted = sum(
+                    item["deleted"] for item in es_stats.get("cleared", [])
+                )
+                print(f"   - Elasticsearch 删除文档: {total_es_deleted} 条")
+            print(f"   - Redis 清空 DB: {redis_stats.get('flushed_db')}")
         
         return {
-            "mongodb": {
-                "memcell": memcell_count,
-                "episode": episode_count,
-                "semantic": semantic_count,
-                "eventlog": eventlog_count,
-                "status": status_count,
-                "cluster": cluster_count,
-                "profile": profile_count,
-            },
-            "redis_keys": len(keys) if keys else 0,
+            "mongodb": mongo_stats,
+            "milvus": milvus_stats,
+            "elasticsearch": es_stats,
+            "redis": redis_stats,
         }
         
     except Exception as e:
@@ -301,14 +345,33 @@ async def main():
     print("🗑️  清空所有记忆数据工具")
     print("=" * 100)
     
-    result = await clear_all_memories(verbose=True)
+    # 确保 bootstrap 初始化，以便 get_bean_by_type 能正常工作
+    import sys
+    import os
+    from bootstrap import setup_project_context
+    
+    # 添加项目根目录到 path
+    sys.path.append(os.getcwd())
+    
+    await setup_project_context()
+    
+    result = await clear_all_memories(verbose=True, rebuild_es=False)
     
     print("\n📊 清空统计:")
-    print(f"   MongoDB 总计: {sum(result['mongodb'].values())} 条")
-    print(f"   Redis Keys: {result['redis_keys']} 个")
+    mongo_total = sum(result["mongodb"].get("deleted", {}).values())
+    print(f"   MongoDB 删除文档: {mongo_total} 条")
+    milvus_total = sum(
+        item["deleted"] for item in result["milvus"].get("cleared", [])
+    )
+    print(f"   Milvus 删除向量: {milvus_total} 条")
+    if result["elasticsearch"].get("recreated"):
+        print("   Elasticsearch: 索引与别名已重新创建")
+    else:
+        es_total = sum(item["deleted"] for item in result["elasticsearch"].get("cleared", []))
+        print(f"   Elasticsearch 删除文档: {es_total} 条")
+    print(f"   Redis 清空 DB: {result['redis'].get('flushed_db')}")
     print("=" * 100)
 
 
 if __name__ == "__main__":
     asyncio.run(main())
-

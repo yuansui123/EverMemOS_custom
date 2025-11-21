@@ -96,8 +96,12 @@ class EpisodicMemoryRawRepository(BaseRepository[EpisodicMemory]):
                 return {}
 
             # 批量查询
+            query = {"_id": {"$in": object_ids}}
+            if user_id:
+                query["user_id"] = user_id
+            
             results = await self.model.find(
-                {"_id": {"$in": object_ids}, "user_id": user_id}, session=session
+                query, session=session
             ).to_list()
 
             # 转换为字典，方便后续使用

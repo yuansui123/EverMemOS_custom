@@ -16,6 +16,7 @@ from infra_layer.adapters.out.search.milvus.memory.event_log_collection import (
 from core.observation.logger import get_logger
 from common_utils.datetime_utils import get_now_with_timezone
 from core.di.decorators import repository
+from memory_layer.memory_scope import MemoryScope
 
 logger = get_logger(__name__)
 
@@ -42,7 +43,7 @@ class EventLogMilvusRepository(BaseMilvusRepository[EventLogCollection]):
 
     async def create_and_save_event_log(
         self,
-        log_id: str,
+        event_id: str,
         user_id: Optional[str],
         atomic_fact: str,
         parent_episode_id: str,
@@ -99,7 +100,7 @@ class EventLogMilvusRepository(BaseMilvusRepository[EventLogCollection]):
 
             # 准备实体数据
             entity = {
-                "id": log_id,
+                "id": event_id,
                 "vector": vector,
                 "user_id": user_id or "",
                 "group_id": group_id or "",
@@ -118,11 +119,11 @@ class EventLogMilvusRepository(BaseMilvusRepository[EventLogCollection]):
             await self.insert(entity)
 
             logger.debug(
-                "✅ 创建事件日志文档成功: log_id=%s, user_id=%s", log_id, user_id
+                "✅ 创建事件日志文档成功: event_id=%s, user_id=%s", event_id, user_id
             )
 
             return {
-                "log_id": log_id,
+                "event_id": event_id,
                 "user_id": user_id,
                 "atomic_fact": atomic_fact,
                 "parent_episode_id": parent_episode_id,
@@ -132,7 +133,7 @@ class EventLogMilvusRepository(BaseMilvusRepository[EventLogCollection]):
             }
 
         except Exception as e:
-            logger.error("❌ 创建事件日志文档失败: log_id=%s, error=%s", log_id, e)
+            logger.error("❌ 创建事件日志文档失败: event_id=%s, error=%s", event_id, e)
             raise
 
     # ==================== 搜索功能 ====================
@@ -150,6 +151,7 @@ class EventLogMilvusRepository(BaseMilvusRepository[EventLogCollection]):
         score_threshold: float = 0.0,
         radius: Optional[float] = None,
         participant_user_id: Optional[str] = None,
+        memory_scope: MemoryScope = MemoryScope.ALL,
     ) -> List[Dict[str, Any]]:
         """
         向量相似性搜索
@@ -165,6 +167,7 @@ class EventLogMilvusRepository(BaseMilvusRepository[EventLogCollection]):
             limit: 返回结果数量
             score_threshold: 相似度阈值
             participant_user_id: 群组检索时额外要求参与者包含该用户
+            memory_scope: 记忆范围 ("all" | "personal" | "group")
 
         Returns:
             搜索结果列表
@@ -172,11 +175,20 @@ class EventLogMilvusRepository(BaseMilvusRepository[EventLogCollection]):
         try:
             # 构建过滤表达式
             filter_expr = []
-            if user_id is not None:  # 使用 is not None 而不是 truthy 检查，支持空字符串
-                if user_id:  # 非空字符串：个人记忆
+            
+            # 根据 memory_scope 处理 user_id 过滤
+            if memory_scope == MemoryScope.PERSONAL:
+                # 个人记忆: user_id != ""
+                if user_id:
                     filter_expr.append(f'user_id == "{user_id}"')
-                else:  # 空字符串：群组记忆
-                    filter_expr.append('user_id == ""')
+                else:
+                    # 如果没有传 user_id,则过滤所有非空 user_id
+                    filter_expr.append('user_id != ""')
+            elif memory_scope == MemoryScope.GROUP:
+                # 群组记忆: user_id == ""
+                filter_expr.append('user_id == ""')
+            # else: MemoryScope.ALL - 不过滤 user_id
+            
             if participant_user_id:
                 filter_expr.append(
                     f'array_contains(participants, "{participant_user_id}")'
@@ -200,6 +212,18 @@ class EventLogMilvusRepository(BaseMilvusRepository[EventLogCollection]):
             # 动态调整 ef 参数：必须 >= limit，通常设为 limit 的 1.5-2 倍
             ef_value = max(128, limit * 2)  # 确保 ef >= limit，至少 128
             search_params = {"metric_type": "COSINE", "params": {"ef": ef_value}}
+            
+            # 不设置 radius 参数!
+            # Milvus 的 radius 是相似度下限,设置 -1.0 反而可能导致问题
+            # 我们通过后置过滤来控制相似度阈值
+            if radius is not None and radius > -1.0:
+                search_params["params"]["radius"] = radius
+            
+            logger.info(
+                f"Milvus 搜索参数: limit={limit}, "
+                f"radius={search_params['params'].get('radius', 'None')}, "
+                f"filter_str={filter_str}"
+            )
 
             results = await self.collection.search(
                 data=[query_vector],
@@ -212,6 +236,13 @@ class EventLogMilvusRepository(BaseMilvusRepository[EventLogCollection]):
 
             # 处理结果
             search_results = []
+            raw_hit_count = sum(len(hits) for hits in results)
+            logger.info(
+                f"Milvus 原始返回: {raw_hit_count} 条结果, "
+                f"limit={limit}, filter_str={filter_str}, "
+                f"memory_scope={memory_scope}"
+            )
+            
             for hits in results:
                 for hit in hits:
                     threshold = (

@@ -1,17 +1,29 @@
-"""PersonalSemanticMemory 和 PersonalEventLog 到 Milvus 同步服务
+"""语义记忆与事件日志同步服务
 
-负责将 PersonalSemanticMemory 和 PersonalEventLog 同步到 Milvus 向量数据库。
+负责将统一的语义记忆与事件日志写入 Milvus / Elasticsearch。
 """
 
 from typing import Optional, List, Dict, Any
 import logging
 from datetime import datetime
 
-from infra_layer.adapters.out.persistence.document.memory.personal_semantic_memory import (
-    PersonalSemanticMemory,
+from infra_layer.adapters.out.persistence.document.memory.semantic_memory_record import (
+    SemanticMemoryRecord,
 )
-from infra_layer.adapters.out.persistence.document.memory.personal_event_log import (
-    PersonalEventLog,
+from infra_layer.adapters.out.search.elasticsearch.converter.semantic_memory_converter import (
+    SemanticMemoryConverter,
+)
+from infra_layer.adapters.out.search.milvus.converter.semantic_memory_milvus_converter import (
+    SemanticMemoryMilvusConverter,
+)
+from infra_layer.adapters.out.persistence.document.memory.event_log_record import (
+    EventLogRecord,
+)
+from infra_layer.adapters.out.search.elasticsearch.converter.event_log_converter import (
+    EventLogConverter,
+)
+from infra_layer.adapters.out.search.milvus.converter.event_log_milvus_converter import (
+    EventLogMilvusConverter,
 )
 from infra_layer.adapters.out.search.repository.semantic_memory_milvus_repository import (
     SemanticMemoryMilvusRepository,
@@ -32,14 +44,9 @@ from common_utils.datetime_utils import get_now_with_timezone
 logger = logging.getLogger(__name__)
 
 
-@service(name="personal_memory_sync_service", primary=True)
-class PersonalMemorySyncService:
-    """PersonalSemanticMemory 和 PersonalEventLog 到 Milvus 同步服务
-    
-    将 PersonalSemanticMemory 和 PersonalEventLog 存储到 Milvus：
-    1. PersonalSemanticMemory → SemanticMemoryCollection
-    2. PersonalEventLog → EventLogCollection
-    """
+@service(name="memory_sync_service", primary=True)
+class MemorySyncService:
+    """语义记忆与事件日志同步服务"""
 
     def __init__(
         self,
@@ -77,7 +84,7 @@ class PersonalMemorySyncService:
         else:
             self.vectorize_service = vectorize_service
         
-        logger.info("PersonalMemorySyncService 初始化完成")
+        logger.info("MemorySyncService 初始化完成")
 
     @staticmethod
     def _normalize_datetime(value: Optional[datetime | str]) -> Optional[datetime]:
@@ -97,14 +104,14 @@ class PersonalMemorySyncService:
 
     async def sync_semantic_memory(
         self, 
-        semantic_memory: PersonalSemanticMemory,
+        semantic_memory: SemanticMemoryRecord,
         sync_to_es: bool = True,
         sync_to_milvus: bool = True
     ) -> Dict[str, int]:
-        """同步单个 PersonalSemanticMemory 到 Milvus 和 ES
+        """同步单条语义记忆到 Milvus/ES
         
         Args:
-            semantic_memory: PersonalSemanticMemory 文档对象
+            semantic_memory: SemanticMemoryRecord 文档对象
             sync_to_es: 是否同步到 ES（默认 True）
             sync_to_milvus: 是否同步到 Milvus（默认 True）
             
@@ -114,68 +121,24 @@ class PersonalMemorySyncService:
         stats = {"semantic_memory": 0, "es_records": 0}
         
         try:
-            # 从 MongoDB 读取已有的 vector
-            content = semantic_memory.content or ""
-            evidence = semantic_memory.evidence or ""
-            
-            # 使用 content + evidence 作为搜索内容
-            search_content = [content, evidence]
-            
             # 从 MongoDB 读取 embedding，如果没有则跳过
-            embedding = semantic_memory.vector
-            if not embedding:
+            if not semantic_memory.vector:
                 logger.warning(f"语义记忆 {semantic_memory.id} 没有 embedding，跳过同步")
                 return stats
             
-            # 处理时间字段
-            start_time_dt = (
-                self._normalize_datetime(semantic_memory.start_time)
-                or get_now_with_timezone()
-            )
-            end_time_dt = self._normalize_datetime(semantic_memory.end_time)
-            duration_days = semantic_memory.duration_days or 0
-            
             # 同步到 Milvus
             if sync_to_milvus:
-                await self.semantic_milvus_repo.create_and_save_semantic_memory(
-                    memory_id=str(semantic_memory.id),
-                    user_id=semantic_memory.user_id,  # 个人记忆，user_id 不为空
-                    content=content,
-                    parent_episode_id=semantic_memory.parent_episode_id or "",
-                    vector=embedding,
-                    group_id=getattr(semantic_memory, 'group_id', None),
-                    participants=getattr(semantic_memory, 'participants', None),
-                    start_time=start_time_dt,
-                    end_time=end_time_dt,
-                    duration_days=duration_days,
-                    evidence=evidence,
-                    search_content=search_content,
-                    extend={
-                        "source_episode_id": semantic_memory.parent_episode_id or "",
-                    },
-                )
+                # 使用转换器生成 Milvus 实体
+                milvus_entity = SemanticMemoryMilvusConverter.from_mongo(semantic_memory)
+                await self.semantic_milvus_repo.insert(milvus_entity, flush=False)
                 stats["semantic_memory"] += 1
                 logger.debug(f"已同步语义记忆到 Milvus: {semantic_memory.id}")
             
             # 同步到 ES
             if sync_to_es:
-                await self.semantic_es_repo.create_and_save_semantic_memory(
-                    memory_id=str(semantic_memory.id),
-                    user_id=semantic_memory.user_id,
-                    timestamp=start_time_dt,
-                    content=content,
-                    parent_episode_id=semantic_memory.parent_episode_id or "",
-                    group_id=getattr(semantic_memory, 'group_id', None),
-                    participants=getattr(semantic_memory, 'participants', None),
-                    start_time=start_time_dt,
-                    end_time=end_time_dt,
-                    duration_days=duration_days,
-                    evidence=evidence,
-                    search_content=search_content,
-                    extend={
-                        "source_episode_id": semantic_memory.parent_episode_id or "",
-                    },
-                )
+                # 使用转换器生成正确的 ES 文档(包括 jieba 分词的 search_content)
+                es_doc = SemanticMemoryConverter.from_mongo(semantic_memory)
+                await es_doc.save()
                 stats["es_records"] += 1
                 logger.debug(f"已同步语义记忆到 ES: {semantic_memory.id}")
             
@@ -187,14 +150,14 @@ class PersonalMemorySyncService:
 
     async def sync_event_log(
         self,
-        event_log: PersonalEventLog,
+        event_log: EventLogRecord,
         sync_to_es: bool = True,
         sync_to_milvus: bool = True
     ) -> Dict[str, int]:
-        """同步单个 PersonalEventLog 到 Milvus 和 ES
+        """同步单条事件日志到 Milvus/ES
         
         Args:
-            event_log: PersonalEventLog 文档对象
+            event_log: EventLogRecord 文档对象
             sync_to_es: 是否同步到 ES（默认 True）
             sync_to_milvus: 是否同步到 Milvus（默认 True）
             
@@ -205,39 +168,23 @@ class PersonalMemorySyncService:
         
         try:
             # 从 MongoDB 读取已有的 vector
-            atomic_fact = event_log.atomic_fact or ""
-            vector = event_log.vector
-            if not vector:
+            if not event_log.vector:
                 logger.warning(f"事件日志 {event_log.id} 没有 embedding，跳过同步")
                 return stats
             
             # 同步到 Milvus
             if sync_to_milvus:
-                await self.eventlog_milvus_repo.create_and_save_event_log(
-                    log_id=str(event_log.id),
-                    user_id=event_log.user_id,  # 个人记忆，user_id 不为空
-                    atomic_fact=atomic_fact,
-                    parent_episode_id=event_log.parent_episode_id or "",
-                    timestamp=event_log.timestamp or get_now_with_timezone(),
-                    vector=vector,
-                    group_id=getattr(event_log, 'group_id', None),
-                    participants=getattr(event_log, 'participants', None),
-                )
+                # 使用转换器生成 Milvus 实体
+                milvus_entity = EventLogMilvusConverter.from_mongo(event_log)
+                await self.eventlog_milvus_repo.insert(milvus_entity, flush=False)
                 stats["event_log"] += 1
                 logger.debug(f"已同步事件日志到 Milvus: {event_log.id}")
             
             # 同步到 ES
             if sync_to_es:
-                await self.eventlog_es_repo.create_and_save_event_log(
-                    log_id=str(event_log.id),
-                    user_id=event_log.user_id,
-                    atomic_fact=atomic_fact,
-                    search_content=[atomic_fact],  # ES 需要 search_content
-                    parent_episode_id=event_log.parent_episode_id or "",
-                    timestamp=event_log.timestamp or get_now_with_timezone(),
-                    group_id=getattr(event_log, 'group_id', None),
-                    participants=getattr(event_log, 'participants', None),
-                )
+                # 使用转换器生成正确的 ES 文档(包括 jieba 分词的 search_content)
+                es_doc = EventLogConverter.from_mongo(event_log)
+                await es_doc.save()
                 stats["es_records"] += 1
                 logger.debug(f"已同步事件日志到 ES: {event_log.id}")
             
@@ -249,14 +196,14 @@ class PersonalMemorySyncService:
 
     async def sync_batch_semantic_memories(
         self,
-        semantic_memories: List[PersonalSemanticMemory],
+        semantic_memories: List[SemanticMemoryRecord],
         sync_to_es: bool = True,
         sync_to_milvus: bool = True
     ) -> Dict[str, int]:
-        """批量同步 PersonalSemanticMemory
+        """批量同步语义记忆
         
         Args:
-            semantic_memories: PersonalSemanticMemory 列表
+            semantic_memories: SemanticMemoryRecord 列表
             sync_to_es: 是否同步到 ES（默认 True）
             sync_to_milvus: 是否同步到 Milvus（默认 True）
             
@@ -275,24 +222,26 @@ class PersonalMemorySyncService:
                 total_stats["semantic_memory"] += stats.get("semantic_memory", 0)
                 total_stats["es_records"] += stats.get("es_records", 0)
             except Exception as e:
-                logger.error(f"批量同步语义记忆失败: {sem_mem.id}, 错误: {e}")
+                logger.error(f"批量同步语义记忆失败: {sem_mem.id}, 错误: {e}", exc_info=True)
+                # 不要静默吞掉异常
         
-        # Flush
+        # 批量同步完成后统一 flush
         if sync_to_milvus and total_stats["semantic_memory"] > 0:
-            await self.semantic_milvus_repo.flush()
+            await self.semantic_milvus_repo.collection.flush()
+            logger.info(f"✅ 语义记忆 Milvus flush 完成: {total_stats['semantic_memory']} 条")
         
         return total_stats
 
     async def sync_batch_event_logs(
         self,
-        event_logs: List[PersonalEventLog],
+        event_logs: List[EventLogRecord],
         sync_to_es: bool = True,
         sync_to_milvus: bool = True
     ) -> Dict[str, int]:
-        """批量同步 PersonalEventLog
+        """批量同步事件日志
         
         Args:
-            event_logs: PersonalEventLog 列表
+            event_logs: EventLogRecord 列表
             sync_to_es: 是否同步到 ES（默认 True）
             sync_to_milvus: 是否同步到 Milvus（默认 True）
             
@@ -311,11 +260,14 @@ class PersonalMemorySyncService:
                 total_stats["event_log"] += stats.get("event_log", 0)
                 total_stats["es_records"] += stats.get("es_records", 0)
             except Exception as e:
-                logger.error(f"批量同步事件日志失败: {evt_log.id}, 错误: {e}")
+                logger.error(f"批量同步事件日志失败: {evt_log.id}, 错误: {e}", exc_info=True)
+                # 不要静默吞掉异常，让它暴露出来
+                raise
         
-        # Flush
+        # 批量同步完成后统一 flush
         if sync_to_milvus and total_stats["event_log"] > 0:
-            await self.eventlog_milvus_repo.flush()
+            await self.eventlog_milvus_repo.collection.flush()
+            logger.info(f"✅ 事件日志 Milvus flush 完成: {total_stats['event_log']} 条")
         
         return total_stats
 

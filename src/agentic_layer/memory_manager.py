@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from memory_layer.types import Memory
 from biz_layer.mem_memorize import memorize
 from memory_layer.memory_manager import MemorizeRequest
+from memory_layer.memory_scope import MemoryScope
 from .fetch_mem_service import get_fetch_memory_service
 from .dtos.memory_query import (
     FetchMemRequest,
@@ -1090,7 +1091,7 @@ class MemoryManager:
         top_k: int = 20,
         retrieval_mode: str = "rrf",  # "embedding" | "bm25" | "rrf"
         data_source: str = "episode",  # "episode" | "event_log" | "semantic_memory" | "profile"
-        memory_scope: str = "all",  # "all" | "personal" | "group"
+        memory_scope: MemoryScope = MemoryScope.ALL,
         current_time: Optional[datetime] = None,  # 当前时间，用于过滤有效期内的语义记忆
         radius: Optional[float] = None,  # COSINE 相似度阈值
     ) -> Dict[str, Any]:
@@ -1134,46 +1135,17 @@ class MemoryManager:
                 user_id=user_id, group_id=group_id, top_k=top_k, start_time=start_time
             )
 
-        original_user_id = user_id
-        # 处理 memory_scope 参数逻辑
-        # - "personal": 只传递 user_id 参数（不传 group_id）
-        # - "group": 只传递 group_id 参数，同时设置 user_id="" 来过滤群组记忆
-        # - "all": user_id 和 group_id 都传递
-        scope_user_id = user_id
-        scope_group_id = group_id
-        participant_user_id: Optional[str] = None
-
-        if memory_scope == "personal":
-            # 个人记忆：只传递 user_id，不传 group_id
-            scope_group_id = None
-        elif memory_scope == "group":
-            # 群组记忆：episode 仍需传递 user_id=""，其余数据源只看 group_id
-            if data_source == "episode":
-                scope_user_id = ""  # 空字符串表示群组 episode
-            else:
-                scope_user_id = None  # 事件日志/语义记忆等只根据 group_id 过滤
-
-            if original_user_id and data_source in (
-                "episode",
-                "event_log",
-                "semantic_memory",
-            ):
-                participant_user_id = original_user_id
-        else:
-            # "all": 不按 user_id 过滤，避免漏掉群组记忆
-            scope_user_id = None
 
         return await self._retrieve_from_vector_stores(
             query=query,
-            user_id=scope_user_id,
-            group_id=scope_group_id,
+            user_id=user_id,  # 直接传递,不修改
+            group_id=group_id,  # 直接传递,不修改
             top_k=top_k,
             retrieval_mode=retrieval_mode,
             data_source=data_source,
             start_time=start_time,
-            memory_scope=memory_scope,
+            memory_scope=memory_scope,  # 传递给 Repository 用于判断
             current_time=current_time,
-            participant_user_id=participant_user_id,
             radius=radius,
         )
 
@@ -1186,9 +1158,8 @@ class MemoryManager:
         retrieval_mode: str = "rrf",
         data_source: str = "memcell",
         start_time: float = None,
-        memory_scope: str = "all",
+        memory_scope: MemoryScope = MemoryScope.ALL,
         current_time: Optional[datetime] = None,
-        participant_user_id: Optional[str] = None,
         radius: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
@@ -1204,7 +1175,6 @@ class MemoryManager:
             start_time: 开始时间（用于计算耗时）
             memory_scope: 记忆范围（all/personal/group）
             current_time: 当前时间，用于过滤有效期内的语义记忆（仅 data_source=semantic_memory 时有效）
-            participant_user_id: 群组 episode/event_log/semantic 检索时，额外限定必须包含该参与者
             radius: COSINE 相似度阈值（仅对非语义记忆有效）
 
         Returns:
@@ -1242,25 +1212,31 @@ class MemoryManager:
 
                 # 向量检索
                 # 注意：为了确保能检索到足够的候选，增加 limit
-                retrieval_limit = max(top_k * 10, 100)  # 至少 100 条候选
+                # Milvus 限制: topk 最大为 16384
+                # 为了解决 EventLog/SemanticMemory 只返回1条的问题,大幅增加 limit
+                retrieval_limit = min(max(top_k * 200, 1000), 16384)  # 至少 1000 条,最多 16384 条
 
+                # 根据 memory_scope 决定如何过滤
+                # Repository 会根据 memory_scope 参数来决定过滤逻辑
+                # 这里直接传递原始的 user_id 和 group_id
+                
                 # 根据 data_source 调用不同的 vector_search 参数
                 milvus_kwargs = dict(
                     query_vector=query_vec,
                     user_id=user_id,
                     group_id=group_id,
                     limit=retrieval_limit,
-                    radius=radius,  # 传递相似度阈值参数
+                    radius=radius,
+                    memory_scope=memory_scope,  # 传递给 Milvus Repository
                 )
                 if data_source == "semantic_memory":
                     milvus_kwargs["current_time"] = current_time
-                if participant_user_id and data_source in (
-                    "episode",
-                    "event_log",
-                    "semantic_memory",
-                ):
-                    milvus_kwargs["participant_user_id"] = participant_user_id
 
+                logger.info(
+                    f"调用 Milvus 检索: data_source={data_source}, "
+                    f"limit={retrieval_limit}, radius={radius}, "
+                    f"user_id={user_id}, group_id={group_id}, memory_scope={memory_scope}"
+                )
                 milvus_results = await milvus_repo.vector_search(**milvus_kwargs)
 
                 # 处理 Milvus 检索结果
@@ -1275,8 +1251,11 @@ class MemoryManager:
 
                 # 按相似度排序
                 embedding_results.sort(key=lambda x: x[1], reverse=True)
-                logger.debug(
-                    f"Milvus 检索完成: data_source={data_source}, 结果数={len(embedding_results)}"
+                logger.info(
+                    f"Milvus 检索完成: data_source={data_source}, "
+                    f"结果数={len(embedding_results)}, "
+                    f"query={query[:30]}, "
+                    f"user_id={user_id}, group_id={group_id}, memory_scope={memory_scope}"
                 )
                 embedding_count = len(embedding_results)
 
@@ -1301,26 +1280,29 @@ class MemoryManager:
                 else:  # "episode"
                     es_repo = get_bean_by_type(EpisodicMemoryEsRepository)
 
-                # 使用 jieba 分词
+                # 使用 jieba 分词并过滤停用词
                 import jieba
+                from core.nlp.stopwords_utils import filter_stopwords
 
-                query_words = list(jieba.cut(query))
+                raw_query_words = list(jieba.cut(query))
+                query_words = filter_stopwords(raw_query_words, min_length=2)
+                
+                logger.debug(
+                    f"BM25 检索: data_source={data_source}, query={query}, "
+                    f"raw_query_words={raw_query_words}, query_words={query_words}"
+                )
 
                 # 调用 ES 检索
                 # 注意：为了确保能检索到足够的候选，增加 size
                 retrieval_size = max(top_k * 10, 100)  # 至少 100 条候选
+                
                 es_kwargs = dict(
                     query=query_words,
                     user_id=user_id,
                     group_id=group_id,
                     size=retrieval_size,
+                    memory_scope=memory_scope,  # 传递给 ES Repository
                 )
-                if participant_user_id and data_source in (
-                    "episode",
-                    "event_log",
-                    "semantic_memory",
-                ):
-                    es_kwargs["participant_user_id"] = participant_user_id
                 if data_source == "semantic_memory" and current_time is not None:
                     es_kwargs["current_time"] = current_time
                 hits = await es_repo.multi_search(**es_kwargs)

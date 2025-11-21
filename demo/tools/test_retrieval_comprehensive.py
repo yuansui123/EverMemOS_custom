@@ -391,11 +391,11 @@ async def main():
     
     await tester.run_comprehensive_test(
         query="北京旅游美食推荐",
-        user_id="robot_001",  # 使用实际数据库中的 user_id
+        user_id="user_001",  # 使用实际数据库中的 user_id
         group_id=None,  # 不指定 group_id
-        current_time=datetime.now().strftime("%Y-%m-%d"),  # 当前时间
+        current_time=None,  # 不传 current_time,避免过滤掉已过期的群组语义记忆
         query_overrides={
-            "event_log": "Beijing travel and food recommendation",
+            # "event_log": "Beijing travel and food recommendation",  # 注释掉英文查询
             "profile": "profile summary",
         },
         profile_group_id="chat_user_001_assistant",
@@ -408,11 +408,11 @@ async def main():
     
     await tester.run_comprehensive_test(
         query="北京美食和旅游",
-        user_id="robot_001",  # 使用实际数据库中的 user_id
+        user_id="user_001",  # 使用实际数据库中的 user_id
         group_id="chat_user_001_assistant",  # 使用实际数据库中的 group_id
-        current_time=datetime.now().strftime("%Y-%m-%d"),
+        current_time=None,  # 不传 current_time,避免过滤掉已过期的群组语义记忆
         query_overrides={
-            "event_log": "Beijing food and travel",
+            # "event_log": "Beijing food and travel",  # 注释掉英文查询
             "profile": "profile summary",
         },
         profile_group_id="chat_user_001_assistant",
@@ -430,7 +430,7 @@ async def main():
         data_source="semantic_memory",
         memory_scope="all",
         retrieval_mode="rrf",
-        user_id="robot_001",  # 使用实际数据库中的 user_id
+        user_id="user_001",  # 使用实际数据库中的 user_id
         current_time=datetime.now().strftime("%Y-%m-%d"),
     )
     
@@ -441,7 +441,7 @@ async def main():
         data_source="semantic_memory",
         memory_scope="all",
         retrieval_mode="rrf",
-        user_id="robot_001",  # 使用实际数据库中的 user_id
+        user_id="user_001",  # 使用实际数据库中的 user_id
         current_time="2027-12-31",  # 未来时间
         allow_empty=True,
     )
@@ -453,7 +453,7 @@ async def main():
         data_source="semantic_memory",
         memory_scope="all",
         retrieval_mode="rrf",
-        user_id="robot_001",  # 使用实际数据库中的 user_id
+        user_id="user_001",  # 使用实际数据库中的 user_id
         current_time="2024-01-01",  # 过去时间
         allow_empty=True,
     )

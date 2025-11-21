@@ -64,6 +64,7 @@ class MemCell:
 
     # Optional fields
     group_id: Optional[str] = None
+    group_name: Optional[str] = None
     participants: Optional[List[str]] = None
     type: Optional[RawDataType] = None
     keywords: Optional[List[str]] = None
@@ -98,6 +99,7 @@ class MemCell:
             "timestamp": to_iso_format(self.timestamp),  # 转换为ISO格式字符串
             "summary": self.summary,
             "group_id": self.group_id,
+            "group_name": self.group_name,
             "participants": self.participants,
             "type": str(self.type.value) if self.type else None,
             "keywords": self.keywords,
@@ -140,12 +142,14 @@ class Memory:
     episode: Optional[str] = None
 
     group_id: Optional[str] = None
+    group_name: Optional[str] = None
     participants: Optional[List[str]] = None
     type: Optional[RawDataType] = None
     keywords: Optional[List[str]] = None
     linked_entities: Optional[List[str]] = None
 
     memcell_event_id_list: Optional[List[str]] = None
+    user_name: Optional[str] = None
     # 语义记忆联想预测字段
     semantic_memories: Optional[List['SemanticMemoryItem']] = None  # 语义记忆联想列表
     extend: Optional[Dict[str, Any]] = None
@@ -168,12 +172,14 @@ class Memory:
         return {
             "memory_type": self.memory_type.value if self.memory_type else None,
             "user_id": self.user_id,
+            "user_name": self.user_name,
             "timestamp": timestamp_str,
             "ori_event_id_list": self.ori_event_id_list,
             "subject": self.subject,
             "summary": self.summary,
             "episode": self.episode,
             "group_id": self.group_id,
+            "group_name": self.group_name,
             "participants": self.participants,
             "type": self.type.value if self.type else None,
             "keywords": self.keywords,

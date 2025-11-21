@@ -1,8 +1,7 @@
 """
 语义记忆 ES 转换器
 
-负责将 MongoDB 的 PersonalSemanticMemory 文档转换为 Elasticsearch 的 EpisodicMemoryDoc 文档。
-注意：复用 EpisodicMemoryDoc，通过 type 字段区分为 semantic_memory。
+负责将 MongoDB 的语义记忆文档转换为 Elasticsearch 的 SemanticMemoryDoc 文档。
 支持个人和群组语义记忆。
 """
 
@@ -12,36 +11,35 @@ import jieba
 from core.oxm.es.base_converter import BaseEsConverter
 from core.observation.logger import get_logger
 from core.nlp.stopwords_utils import filter_stopwords
-from infra_layer.adapters.out.search.elasticsearch.memory.episodic_memory import (
-    EpisodicMemoryDoc,
+from infra_layer.adapters.out.search.elasticsearch.memory.semantic_memory import (
+    SemanticMemoryDoc,
 )
-from infra_layer.adapters.out.persistence.document.memory.personal_semantic_memory import (
-    PersonalSemanticMemory as MongoPersonalSemanticMemory,
+from infra_layer.adapters.out.persistence.document.memory.semantic_memory_record import (
+    SemanticMemoryRecord as MongoSemanticMemoryRecord,
 )
 from datetime import datetime
 
 logger = get_logger(__name__)
 
 
-class SemanticMemoryConverter(BaseEsConverter[EpisodicMemoryDoc]):
+class SemanticMemoryConverter(BaseEsConverter[SemanticMemoryDoc]):
     """
     语义记忆 ES 转换器
     
-    将 MongoDB 的 PersonalSemanticMemory 文档转换为 Elasticsearch 的 EpisodicMemoryDoc 文档。
-    复用 EpisodicMemoryDoc，通过 type 字段标记为 semantic_memory。
+    将 MongoDB 的语义记忆文档转换为 Elasticsearch 的 SemanticMemoryDoc 文档。
     支持个人和群组语义记忆。
     """
 
     @classmethod
-    def from_mongo(cls, source_doc: MongoPersonalSemanticMemory) -> EpisodicMemoryDoc:
+    def from_mongo(cls, source_doc: MongoSemanticMemoryRecord) -> SemanticMemoryDoc:
         """
-        从 MongoDB PersonalSemanticMemory 文档转换为 ES EpisodicMemoryDoc 文档
+        从 MongoDB 语义记忆文档转换为 ES SemanticMemoryDoc 文档
 
         Args:
-            source_doc: MongoDB 的 PersonalSemanticMemory 文档实例
+            source_doc: MongoDB 语义记忆文档实例
 
         Returns:
-            EpisodicMemoryDoc: ES 文档实例
+            SemanticMemoryDoc: ES 文档实例
         """
         if source_doc is None:
             raise ValueError("MongoDB 文档不能为空")
@@ -61,23 +59,31 @@ class SemanticMemoryConverter(BaseEsConverter[EpisodicMemoryDoc]):
             if not timestamp:
                 timestamp = source_doc.created_at or datetime.now()
             
+            # 确保 event_id 不为空
+            event_id = str(source_doc.id) if source_doc.id else None
+            if not event_id:
+                # 兜底逻辑:使用 parent_episode_id + timestamp 生成唯一ID
+                import uuid
+                event_id = f"semantic_{uuid.uuid4().hex}"
+                logger.warning(f"MongoDB 文档缺少 id,生成临时 ID: {event_id}")
+            
             # 创建 ES 文档实例
-            es_doc = EpisodicMemoryDoc(
+            es_doc = SemanticMemoryDoc(
                 # 基础标识字段
-                event_id=str(source_doc.id) if source_doc.id else "",
+                event_id=event_id,
                 user_id=source_doc.user_id,
-                user_name=None,  # 个人语义记忆没有 user_name
+                user_name=source_doc.user_name or "",
                 # 时间字段
                 timestamp=timestamp,
-                # 核心内容字段 - 使用 content 作为 episode
-                title=source_doc.content[:100] if source_doc.content else "",  # 取前100字符作为标题
-                episode=source_doc.content,
+                # 核心内容字段
+                semantic=source_doc.content,
+                evidence=source_doc.evidence or "",
                 search_content=search_content,  # BM25 搜索的核心字段
-                summary=source_doc.evidence[:200] if source_doc.evidence else None,  # 证据作为摘要
                 # 分类和标签字段
                 group_id=source_doc.group_id,
+                group_name=source_doc.group_name or "",
                 participants=source_doc.participants,
-                type="semantic_memory",  # 标记类型（去除 personal 前缀）
+                type="Conversation",  # 事件类型
                 keywords=None,
                 linked_entities=None,
                 # MongoDB 特有字段
@@ -89,7 +95,6 @@ class SemanticMemoryConverter(BaseEsConverter[EpisodicMemoryDoc]):
                     "start_time": source_doc.start_time,
                     "end_time": source_doc.end_time,
                     "duration_days": source_doc.duration_days,
-                    "evidence": source_doc.evidence,
                     "vector_model": source_doc.vector_model,
                     **(source_doc.extend or {}),
                 },
@@ -101,11 +106,11 @@ class SemanticMemoryConverter(BaseEsConverter[EpisodicMemoryDoc]):
             return es_doc
 
         except Exception as e:
-            logger.error("从 MongoDB PersonalSemanticMemory 文档转换为 ES 文档失败: %s", e)
+            logger.error("从 MongoDB 语义记忆文档转换为 ES 文档失败: %s", e)
             raise
 
     @classmethod
-    def _build_search_content(cls, source_doc: MongoPersonalSemanticMemory) -> List[str]:
+    def _build_search_content(cls, source_doc: MongoSemanticMemoryRecord) -> List[str]:
         """
         构建搜索内容列表
         
@@ -119,11 +124,11 @@ class SemanticMemoryConverter(BaseEsConverter[EpisodicMemoryDoc]):
             words = filter_stopwords(words)
             search_content.extend(words)
         
-        # 分词 evidence
-        if source_doc.evidence:
-            words = jieba.lcut(source_doc.evidence)
-            words = filter_stopwords(words)
-            search_content.extend(words)
+        # # 分词 evidence
+        # if source_doc.evidence:
+        #     words = jieba.lcut(source_doc.evidence)
+        #     words = filter_stopwords(words)
+        #     search_content.extend(words)
         
         # 去重并保持顺序
         seen = set()

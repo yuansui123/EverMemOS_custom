@@ -1,3 +1,6 @@
+
+
+from dataclasses import dataclass
 import random
 import time
 import json
@@ -31,11 +34,11 @@ from component.redis_provider import RedisProvider
 from infra_layer.adapters.out.persistence.repository.episodic_memory_raw_repository import (
     EpisodicMemoryRawRepository,
 )
-from infra_layer.adapters.out.persistence.repository.personal_semantic_memory_raw_repository import (
-    PersonalSemanticMemoryRawRepository,
+from infra_layer.adapters.out.persistence.repository.semantic_memory_record_repository import (
+    SemanticMemoryRecordRawRepository,
 )
-from infra_layer.adapters.out.persistence.repository.personal_event_log_raw_repository import (
-    PersonalEventLogRawRepository,
+from infra_layer.adapters.out.persistence.repository.event_log_record_repository import (
+    EventLogRecordRawRepository,
 )
 from infra_layer.adapters.out.persistence.repository.conversation_status_raw_repository import (
     ConversationStatusRawRepository,
@@ -46,9 +49,6 @@ from infra_layer.adapters.out.persistence.repository.conversation_meta_raw_repos
 from infra_layer.adapters.out.persistence.repository.core_memory_raw_repository import (
     CoreMemoryRawRepository,
 )
-from infra_layer.adapters.out.persistence.repository.memcell_raw_repository import (
-    MemCellRawRepository,
-)
 from infra_layer.adapters.out.persistence.repository.group_user_profile_memory_raw_repository import (
     GroupUserProfileMemoryRawRepository,
 )
@@ -57,7 +57,8 @@ from infra_layer.adapters.out.persistence.repository.group_profile_raw_repositor
 )
 from biz_layer.conversation_data_repo import ConversationDataRepository
 from memory_layer.types import RawDataType
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
+from dataclasses import dataclass
 import uuid
 from datetime import datetime, timedelta
 import os
@@ -103,10 +104,62 @@ from infra_layer.adapters.out.search.repository.semantic_memory_milvus_repositor
 from infra_layer.adapters.out.search.repository.event_log_milvus_repository import (
     EventLogMilvusRepository,
 )
-from biz_layer.memcell_sync import MemCellSyncService
+from biz_layer.personal_memory_sync import MemorySyncService
 
 logger = get_logger(__name__)
 
+@dataclass
+class MemoryDocPayload:
+    memory_type: MemoryType
+    doc: Any
+
+
+def _clone_semantic_memory_item(raw_item: Any) -> Optional[SemanticMemoryItem]:
+    """将任意结构的语义记忆条目转换为 SemanticMemoryItem 实例"""
+    if raw_item is None:
+        return None
+
+    if isinstance(raw_item, SemanticMemoryItem):
+        return SemanticMemoryItem(
+            content=raw_item.content,
+            evidence=getattr(raw_item, "evidence", None),
+            start_time=getattr(raw_item, "start_time", None),
+            end_time=getattr(raw_item, "end_time", None),
+            duration_days=getattr(raw_item, "duration_days", None),
+            source_episode_id=getattr(raw_item, "source_episode_id", None),
+            embedding=getattr(raw_item, "embedding", None),
+        )
+
+    if isinstance(raw_item, dict):
+        return SemanticMemoryItem(
+            content=raw_item.get("content", ""),
+            evidence=raw_item.get("evidence"),
+            start_time=raw_item.get("start_time"),
+            end_time=raw_item.get("end_time"),
+            duration_days=raw_item.get("duration_days"),
+            source_episode_id=raw_item.get("source_episode_id"),
+            embedding=raw_item.get("embedding"),
+        )
+
+    return None
+
+
+def _clone_event_log(raw_event_log: Any) -> Optional[EventLog]:
+    """将任意结构的事件日志转换为 EventLog 实例"""
+    if raw_event_log is None:
+        return None
+
+    if isinstance(raw_event_log, EventLog):
+        return EventLog(
+            time=getattr(raw_event_log, "time", ""),
+            atomic_fact=list(getattr(raw_event_log, "atomic_fact", []) or []),
+            fact_embeddings=getattr(raw_event_log, "fact_embeddings", None),
+        )
+
+    if isinstance(raw_event_log, dict):
+        return EventLog.from_dict(raw_event_log)
+
+    return None
 
 async def _trigger_clustering(
     group_id: str, memcell: MemCell, scene: Optional[str] = None
@@ -480,204 +533,106 @@ async def save_personal_profile_memory(
         # 移除单个操作成功日志
 
 
-async def save_memories(
-    memory_list: List[Memory], current_time: datetime, version: Optional[str] = None
-):
-    logger.info(f"[mem_memorize] 保存 {len(memory_list)} 个记忆到数据库")
-    # 初始化Repository实例
-    episodic_memory_repo = get_bean_by_type(EpisodicMemoryRawRepository)
-    group_user_profile_memory_repo = get_bean_by_type(
-        GroupUserProfileMemoryRawRepository
-    )
-    group_profile_raw_repo = get_bean_by_type(GroupProfileRawRepository)
-    episodic_memory_milvus_repo = get_bean_by_type(EpisodicMemoryMilvusRepository)
-    es_repo = get_bean_by_type(EpisodicMemoryEsRepository)
+async def save_memory_docs(
+    doc_payloads: List[MemoryDocPayload], version: Optional[str] = None
+) -> Dict[MemoryType, List[Any]]:
+    """
+    通用 Doc 保存函数，按 MemoryType 枚举自动保存并同步
+    """
 
-    # 按对象类型分类保存
-    episode_memories = [
-        m
-        for m in memory_list
-        if isinstance(m, Memory)
-        and hasattr(m, 'memory_type')
-        and m.memory_type == MemoryType.EPISODE_MEMORY
-    ]
-    semantic_memories = [m for m in memory_list if isinstance(m, SemanticMemoryItem)]
-    event_logs = [m for m in memory_list if isinstance(m, EventLog)]
-    profile_memories = [
-        m
-        for m in memory_list
-        if isinstance(m, Memory)
-        and hasattr(m, 'memory_type')
-        and m.memory_type == MemoryType.PROFILE
-    ]
-    group_profile_memories = [
-        m
-        for m in memory_list
-        if isinstance(m, Memory)
-        and hasattr(m, 'memory_type')
-        and m.memory_type == MemoryType.GROUP_PROFILE
-    ]
+    grouped_docs: Dict[MemoryType, List[Any]] = defaultdict(list)
+    for payload in doc_payloads:
+        if payload and payload.doc:
+            grouped_docs[payload.memory_type].append(payload.doc)
 
-    # 保存个人 episode 到 MongoDB/ES/Milvus
-    for episode_mem in episode_memories:
-        # 转换为EpisodicMemory文档格式
-        doc = _convert_episode_memory_to_doc(episode_mem, current_time)
-        doc = await episodic_memory_repo.append_episodic_memory(doc)
-        episode_mem.event_id = str(doc.event_id)
+    saved_result: Dict[MemoryType, List[Any]] = {}
 
-        # 保存到 ES
-        es_doc = EpisodicMemoryConverter.from_mongo(doc)
-        await es_doc.save()
+    # Episodic
+    episodic_docs = grouped_docs.get(MemoryType.EPISODE_MEMORY, [])
+    if episodic_docs:
+        episodic_repo = get_bean_by_type(EpisodicMemoryRawRepository)
+        episodic_milvus_repo = get_bean_by_type(EpisodicMemoryMilvusRepository)
+        saved_episodic: List[Any] = []
 
-        # 保存到 Milvus（添加缺失的字段）
-        milvus_entity = EpisodicMemoryMilvusConverter.from_mongo(doc)
-        vector = (
-            milvus_entity.get("vector") if isinstance(milvus_entity, dict) else None
-        )
+        for doc in episodic_docs:
+            saved_doc = await episodic_repo.append_episodic_memory(doc)
+            saved_episodic.append(saved_doc)
 
-        if not vector or (isinstance(vector, list) and len(vector) == 0):
-            logger.warning(
-                "[mem_memorize] 跳过写入Milvus：向量为空或缺失，event_id=%s",
-                getattr(doc, 'event_id', None),
+            es_doc = EpisodicMemoryConverter.from_mongo(saved_doc)
+            await es_doc.save()
+
+            milvus_entity = EpisodicMemoryMilvusConverter.from_mongo(saved_doc)
+            vector = (
+                milvus_entity.get("vector") if isinstance(milvus_entity, dict) else None
             )
-        else:
-            await episodic_memory_milvus_repo.insert(milvus_entity)
-            logger.debug(
-                f"✅ 保存 episode_memory: user_id={doc.user_id}, event_id={episode_mem.event_id}"
-            )
-
-        logger.debug(f"✅ 保存 episode_memory: {episode_mem.event_id}")
-
-    # 保存Profile记忆到CoreMemoryRawRepository
-    for profile_mem in profile_memories:
-        try:
-            await _save_profile_memory_to_group_user_profile_memory(
-                profile_mem, group_user_profile_memory_repo, version
-            )
-        except Exception as e:
-            logger.error(f"保存Profile记忆失败: {e}")
-
-    for group_profile_mem in group_profile_memories:
-        try:
-            await _save_group_profile_memory(
-                group_profile_mem, group_profile_raw_repo, version
-            )
-        except Exception as e:
-            logger.error(f"保存Group Profile记忆失败: {e}")
-
-    # 保存个人语义记忆到 MongoDB（仅 MongoDB）
-    semantic_memory_repo = get_bean_by_type(PersonalSemanticMemoryRawRepository)
-    saved_semantic_docs = []
-
-    # 批量获取所有 parent_event_id 对应的 episodic_memory 文档
-    # 先收集所有有效的 semantic_memories 和对应的 parent_event_ids
-    valid_semantic_memories = []
-    parent_event_ids_set = set()
-    for sem_mem in semantic_memories:
-        if not sem_mem.content or not sem_mem.embedding:
-            continue
-        valid_semantic_memories.append(sem_mem)
-        parent_event_ids_set.add(str(sem_mem.parent_event_id))
-
-    # 批量查询所有 parent_event_id 对应的 episodic_memory
-    if valid_semantic_memories:
-        # 获取第一个有效记忆的 user_id（所有记忆应该属于同一用户）
-        user_id = valid_semantic_memories[0].user_id
-        parent_docs_dict = await episodic_memory_repo.get_by_event_ids(
-            list(parent_event_ids_set), user_id
-        )
-
-        # 遍历有效的 semantic_memories，使用批量查询结果
-        for sem_mem in valid_semantic_memories:
-            parent_event_id = str(sem_mem.parent_event_id)
-            parent_doc = parent_docs_dict.get(parent_event_id)
-            if not parent_doc:
+            if vector and len(vector) > 0:
+                await episodic_milvus_repo.insert(milvus_entity, flush=False)
+            else:
                 logger.warning(
-                    f"⚠️  未找到 parent_event_id={parent_event_id} 对应的 episodic_memory"
+                    "[mem_memorize] 跳过写入Milvus：向量为空或缺失，event_id=%s",
+                    getattr(saved_doc, "event_id", None),
                 )
-                continue
 
-            # 转换为 PersonalSemanticMemory 文档格式并保存到 MongoDB
-            doc = _convert_semantic_memory_to_doc(sem_mem, parent_doc, current_time)
-            doc = await semantic_memory_repo.save(doc)
-            if doc:
-                saved_semantic_docs.append(doc)
-                logger.debug(f"✅ 保存 semantic_memory 到 MongoDB: {doc.id}")
+        if saved_episodic:
+            await episodic_milvus_repo.flush()
+        saved_result[MemoryType.EPISODE_MEMORY] = saved_episodic
 
-    # 统一同步到 Milvus/ES（通过 PersonalMemorySyncService）
-    if saved_semantic_docs:
-        from biz_layer.personal_memory_sync import PersonalMemorySyncService
+    # Semantic
+    semantic_docs = grouped_docs.get(MemoryType.SEMANTIC_MEMORY, [])
+    if semantic_docs:
+        semantic_repo = get_bean_by_type(SemanticMemoryRecordRawRepository)
+        saved_semantic = await semantic_repo.create_batch(semantic_docs)
+        saved_result[MemoryType.SEMANTIC_MEMORY] = saved_semantic
 
-        sync_service = get_bean_by_type(PersonalMemorySyncService)
-        sync_stats = await sync_service.sync_batch_semantic_memories(
-            saved_semantic_docs, sync_to_es=True, sync_to_milvus=True
-        )
-        logger.info(f"✅ 同步 {sync_stats['semantic_memory']} 个语义记忆到 Milvus/ES")
-
-    # 保存个人事件日志到 MongoDB（仅 MongoDB）
-    event_log_repo = get_bean_by_type(PersonalEventLogRawRepository)
-    saved_event_log_docs = []
-
-    # 批量获取所有 parent_event_id 对应的 episodic_memory 文档
-    # 先收集所有有效的 event_logs 和对应的 parent_event_ids
-    valid_event_logs = []
-    event_log_parent_ids_set = set()
-    for event_log in event_logs:
-        if not event_log.atomic_fact or not event_log.fact_embeddings:
-            continue
-        valid_event_logs.append(event_log)
-        event_log_parent_ids_set.add(str(event_log.parent_event_id))
-
-    # 批量查询所有 parent_event_id 对应的 episodic_memory
-    if valid_event_logs:
-        # 获取第一个有效日志的 user_id（所有日志应该属于同一用户）
-        user_id = valid_event_logs[0].user_id
-        event_log_parent_docs_dict = await episodic_memory_repo.get_by_event_ids(
-            list(event_log_parent_ids_set), user_id
+        sync_service = get_bean_by_type(MemorySyncService)
+        await sync_service.sync_batch_semantic_memories(
+            saved_semantic, sync_to_es=True, sync_to_milvus=True
         )
 
-        # 遍历有效的 event_logs，使用批量查询结果
-        for event_log in valid_event_logs:
-            parent_event_id = str(event_log.parent_event_id)
-            parent_doc = event_log_parent_docs_dict.get(parent_event_id)
-            if not parent_doc:
-                logger.warning(
-                    f"⚠️  未找到 parent_event_id={parent_event_id} 对应的 episodic_memory"
+    # Event Log
+    event_log_docs = grouped_docs.get(MemoryType.PERSONAL_EVENT_LOG, [])
+    if event_log_docs:
+        event_log_repo = get_bean_by_type(EventLogRecordRawRepository)
+        saved_event_logs = await event_log_repo.create_batch(event_log_docs)
+        saved_result[MemoryType.PERSONAL_EVENT_LOG] = saved_event_logs
+
+        sync_service = get_bean_by_type(MemorySyncService)
+        await sync_service.sync_batch_event_logs(
+            saved_event_logs, sync_to_es=True, sync_to_milvus=True
+        )
+
+    # Profile
+    profile_docs = grouped_docs.get(MemoryType.PROFILE, [])
+    if profile_docs:
+        group_user_profile_repo = get_bean_by_type(
+            GroupUserProfileMemoryRawRepository
+        )
+        saved_profiles = []
+        for profile_mem in profile_docs:
+            try:
+                await _save_profile_memory_to_group_user_profile_memory(
+                    profile_mem, group_user_profile_repo, version
                 )
-                continue
+                saved_profiles.append(profile_mem)
+            except Exception as exc:
+                logger.error(f"保存Profile记忆失败: {exc}")
+        if saved_profiles:
+            saved_result[MemoryType.PROFILE] = saved_profiles
 
-            # 转换为 PersonalEventLog 文档格式列表并保存到 MongoDB
-            docs = _convert_event_log_to_docs(event_log, parent_doc, current_time)
+    group_profile_docs = grouped_docs.get(MemoryType.GROUP_PROFILE, [])
+    if group_profile_docs:
+        group_profile_repo = get_bean_by_type(GroupProfileRawRepository)
+        saved_group_profiles = []
+        for mem in group_profile_docs:
+            try:
+                await _save_group_profile_memory(mem, group_profile_repo, version)
+                saved_group_profiles.append(mem)
+            except Exception as exc:
+                logger.error(f"保存Group Profile记忆失败: {exc}")
+        if saved_group_profiles:
+            saved_result[MemoryType.GROUP_PROFILE] = saved_group_profiles
 
-            for doc in docs:
-                # 保存到 MongoDB
-                doc = await event_log_repo.save(doc)
-                if doc:
-                    saved_event_log_docs.append(doc)
-
-            logger.debug(f"✅ 保存 event_log 到 MongoDB: {len(docs)} 条")
-
-    # 统一同步到 Milvus/ES（通过 PersonalMemorySyncService）
-    if saved_event_log_docs:
-        from biz_layer.personal_memory_sync import PersonalMemorySyncService
-
-        sync_service = get_bean_by_type(PersonalMemorySyncService)
-        sync_stats = await sync_service.sync_batch_event_logs(
-            saved_event_log_docs, sync_to_es=True, sync_to_milvus=True
-        )
-        logger.info(f"✅ 同步 {sync_stats['event_log']} 个事件日志到 Milvus/ES")
-
-    # 刷新 Milvus，确保数据立即可搜索
-    if episode_memories:
-        await episodic_memory_milvus_repo.flush()
-        logger.info("[mem_memorize] Milvus 已刷新，数据立即可搜索")
-
-    logger.info(f"[mem_memorize] 保存完成:")
-    logger.info(f"  - EPISODE_MEMORY: {len(episode_memories)} 个")
-    logger.info(f"  - SEMANTIC_MEMORY: {len(semantic_memories)} 个")
-    logger.info(f"  - PERSONAL_EVENT_LOG: {len(event_logs)} 个")
-    logger.info(f"  - PROFILE: {len(profile_memories)} 个")
-    logger.info(f"  - GROUP_PROFILE: {len(group_profile_memories)} 个")
+    return saved_result
 
 
 async def load_core_memories(
@@ -880,22 +835,6 @@ async def memorize(request: MemorizeRequest) -> List[Memory]:
     # MemCell存表
     memcell = await _save_memcell_to_database(memcell, current_time)
 
-    # 同步 MemCell 到 Milvus 和 ES（包括 episode/semantic_memories/event_log）
-    memcell_repo = get_bean_by_type(MemCellRawRepository)
-    doc_memcell = await memcell_repo.get_by_event_id(str(memcell.event_id))
-
-    if doc_memcell:
-        sync_service = get_bean_by_type(MemCellSyncService)
-        sync_stats = await sync_service.sync_memcell(
-            doc_memcell, sync_to_es=True, sync_to_milvus=True
-        )
-        logger.info(
-            f"[mem_memorize] MemCell 同步到 Milvus/ES 完成: {memcell.event_id}, "
-            f"stats={sync_stats}"
-        )
-    else:
-        logger.warning(f"[mem_memorize] 无法加载 MemCell 进行同步: {memcell.event_id}")
-
     # print_memory = random.random() < 0.1
 
     logger.info(f"[mem_memorize] 成功保存MemCell: {memcell.event_id}")
@@ -904,6 +843,26 @@ async def memorize(request: MemorizeRequest) -> List[Memory]:
     #     logger.info(f"[mem_memorize] 打印MemCell: {memcell}")
 
     memcells = [memcell]
+
+    group_episode_memories: List[Memory] = [
+        Memory(
+            memory_type=MemoryType.EPISODE_MEMORY,
+            user_id="",
+            timestamp=memcell.timestamp or current_time,
+            ori_event_id_list=[memcell.event_id],
+            subject=memcell.subject,
+            summary=memcell.summary,
+            episode=memcell.episode,
+            group_id=memcell.group_id,
+            group_name=memcell.group_name or request.group_name,
+            participants=memcell.participants,
+            type=memcell.type,
+            keywords=memcell.keywords,
+            linked_entities=memcell.linked_entities,
+            memcell_event_id_list=[memcell.event_id],
+            user_name=memcell.group_name or request.group_name,
+        )
+    ]
 
     # 同步触发聚类（等待完成，确保 Profile 提取成功）
     if request.group_id:
@@ -936,9 +895,9 @@ async def memorize(request: MemorizeRequest) -> List[Memory]:
         # 使用真实Repository读取用户数据
         old_memory_list = await load_core_memories(request, participants, current_time)
 
-        # 提取记忆
-        memory_list = []
-        episode_memories = []
+        episode_memories: List[Memory] = []
+        semantic_memories: List[SemanticMemoryItem] = []
+        event_logs: List[EventLog] = []
 
         # 第一阶段：提取个人 episode
         for memory_type in memory_types:
@@ -953,11 +912,43 @@ async def memorize(request: MemorizeRequest) -> List[Memory]:
                 )
                 if extracted_memories:
                     episode_memories = extracted_memories
-                    memory_list += extracted_memories
 
-        # 保存 episode 记忆到数据库
-        if episode_memories:
-            await save_memories(episode_memories, current_time)
+        # 将 Episode 转换为 Doc 并保存，获取 parent_docs_map
+        parent_docs_map: Dict[str, Any] = {}
+        episodic_source_memories: List[Memory] = (
+            group_episode_memories + episode_memories
+        )
+        group_parent_event_id: Optional[str] = None
+
+        if episodic_source_memories:
+            for episode_mem in episodic_source_memories:
+                if getattr(episode_mem, "group_name", None) is None:
+                    episode_mem.group_name = request.group_name
+                if getattr(episode_mem, "user_name", None) is None:
+                    episode_mem.user_name = episode_mem.user_id
+            episodic_docs = [
+                _convert_episode_memory_to_doc(episode_mem, current_time)
+                for episode_mem in episodic_source_memories
+            ]
+            episodic_payloads = [
+                MemoryDocPayload(MemoryType.EPISODE_MEMORY, doc)
+                for doc in episodic_docs
+            ]
+            saved_docs_map = await save_memory_docs(episodic_payloads)
+            saved_episode_docs = saved_docs_map.get(
+                MemoryType.EPISODE_MEMORY, []
+            )
+            for idx, (episode_mem, saved_doc) in enumerate(
+                zip(episodic_source_memories, saved_episode_docs)
+            ):
+                episode_mem.event_id = str(saved_doc.event_id)
+                parent_docs_map[str(saved_doc.event_id)] = saved_doc
+                if group_parent_event_id is None and idx < len(
+                    group_episode_memories
+                ):
+                    group_parent_event_id = str(saved_doc.event_id)
+        else:
+            group_parent_event_id = None
 
         # 第二阶段：基于已保存的 episode 提取语义记忆和事件日志
         for memory_type in memory_types:
@@ -965,40 +956,113 @@ async def memorize(request: MemorizeRequest) -> List[Memory]:
                 MemoryType.SEMANTIC_MEMORY,
                 MemoryType.PERSONAL_EVENT_LOG,
             ]:
-                for episode_mem in episode_memories:
+                # 遍历所有已保存的 Episode (包括个人和群组)
+                for episode_mem in episodic_source_memories:
+                    if not episode_mem.event_id:
+                        continue
+                    # 跳过群组 Episode (user_id=""),因为群组的 semantic/eventlog 直接从 MemCell 提取
+                    if episode_mem.user_id == "":
+                        continue
+                    
+                    logger.info(f"🔍 为 user_id={episode_mem.user_id} 提取 {memory_type}")
                     extracted_memories = await memory_manager.extract_memory(
                         memcell_list=[],
                         memory_type=memory_type,
                         user_ids=[episode_mem.user_id],
                         episode_memory=episode_mem,
                     )
-                    if extracted_memories:
-                        # 为提取的记忆添加元信息
-                        if isinstance(extracted_memories, list):
-                            for mem in extracted_memories:
-                                mem.parent_event_id = episode_mem.event_id
-                                mem.user_id = episode_mem.user_id
-                                mem.group_id = episode_mem.group_id
-                            memory_list += extracted_memories
-                        else:
-                            # EventLog 类型
-                            extracted_memories.parent_event_id = episode_mem.event_id
-                            extracted_memories.user_id = episode_mem.user_id
-                            extracted_memories.group_id = episode_mem.group_id
-                            memory_list.append(extracted_memories)
+                    if not extracted_memories:
+                        logger.warning(f"⚠️  提取失败或为空: user_id={episode_mem.user_id}, memory_type={memory_type}")
+                        continue
+                    logger.info(f"✅ 成功提取: user_id={episode_mem.user_id}, memory_type={memory_type}, 数量={len(extracted_memories) if isinstance(extracted_memories, list) else 1}")
 
-        # 保存语义记忆和事件日志
-        semantic_and_eventlog = [m for m in memory_list if m not in episode_memories]
-        if semantic_and_eventlog:
-            await save_memories(semantic_and_eventlog, current_time)
+                    if memory_type == MemoryType.SEMANTIC_MEMORY:
+                        for mem in extracted_memories:
+                            mem.parent_event_id = episode_mem.event_id
+                            mem.user_id = episode_mem.user_id
+                            mem.group_id = episode_mem.group_id
+                            mem.group_name = episode_mem.group_name
+                            #TODO:添加 username
+                            if getattr(mem, "user_name", None) is None:
+                                mem.user_name = episode_mem.user_name
+                            semantic_memories.append(mem)
+                    elif memory_type == MemoryType.PERSONAL_EVENT_LOG:
+                        extracted_memories.parent_event_id = episode_mem.event_id
+                        extracted_memories.user_id = episode_mem.user_id
+                        extracted_memories.group_id = episode_mem.group_id
+                        extracted_memories.group_name = episode_mem.group_name
+                        #TODO:添加 username
+                        if getattr(extracted_memories, "user_name", None) is None:
+                            extracted_memories.user_name = episode_mem.user_name
+                        event_logs.append(extracted_memories)
+
+        # 追加群组层面的语义记忆与事件日志（直接来自 MemCell）
+        if group_parent_event_id:
+            group_parent_doc = parent_docs_map.get(group_parent_event_id)
+            if memcell.semantic_memories and group_parent_doc:
+                for raw_sem in memcell.semantic_memories:
+                    sem_item = _clone_semantic_memory_item(raw_sem)
+                    sem_item.parent_event_id = group_parent_event_id
+                    sem_item.user_id = ""
+                    sem_item.group_id = memcell.group_id
+                    sem_item.group_name = memcell.group_name or request.group_name
+                    sem_item.user_name = sem_item.group_name
+                    semantic_memories.append(sem_item)
+
+            if memcell.event_log:
+                event_log_obj = _clone_event_log(memcell.event_log)
+                if event_log_obj and event_log_obj.atomic_fact:
+                    event_log_obj.parent_event_id = group_parent_event_id
+                    event_log_obj.user_id = ""
+                    event_log_obj.group_id = memcell.group_id
+                    event_log_obj.group_name = memcell.group_name or request.group_name
+                    event_log_obj.user_name = event_log_obj.group_name
+                    event_logs.append(event_log_obj)
+
+        # 将语义记忆和事件日志转换为 Doc
+        semantic_docs = []
+        for sem_mem in semantic_memories:
+            parent_doc = parent_docs_map.get(str(sem_mem.parent_event_id))
+            if not parent_doc:
+                logger.warning(
+                    f"⚠️  未找到 parent_event_id={sem_mem.parent_event_id} 对应的 episodic_memory"
+                )
+                continue
+            doc = _convert_semantic_memory_to_doc(sem_mem, parent_doc, current_time)
+            semantic_docs.append(doc)
+
+        event_log_docs = []
+        for event_log in event_logs:
+            parent_doc = parent_docs_map.get(str(event_log.parent_event_id))
+            if not parent_doc:
+                logger.warning(
+                    f"⚠️  未找到 parent_event_id={event_log.parent_event_id} 对应的 episodic_memory"
+                )
+                continue
+            docs = _convert_event_log_to_docs(event_log, parent_doc, current_time)
+            event_log_docs.extend(docs)
+
+        payloads: List[MemoryDocPayload] = []
+        if semantic_docs:
+            payloads.extend(
+                MemoryDocPayload(MemoryType.SEMANTIC_MEMORY, doc)
+                for doc in semantic_docs
+            )
+        if event_log_docs:
+            payloads.extend(
+                MemoryDocPayload(MemoryType.PERSONAL_EVENT_LOG, doc)
+                for doc in event_log_docs
+            )
+        if payloads:
+            await save_memory_docs(payloads)
 
         await update_status_after_memcell(
             request, memcells, current_time, request.raw_data_type
         )
-
         # TODO: 实际项目中应该加锁避免并发问题
         # 释放锁
-        return memory_list
+        return episode_memories + semantic_memories + event_logs
+       
     else:
         return None
 

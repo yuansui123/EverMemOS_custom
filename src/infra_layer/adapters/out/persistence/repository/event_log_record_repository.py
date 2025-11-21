@@ -1,7 +1,7 @@
 """
-PersonalEventLog Repository
+EventLogRecord Repository
 
-提供个人事件日志的 CRUD 操作和查询功能。
+提供通用事件日志的 CRUD 操作和查询功能。
 """
 
 from datetime import datetime
@@ -11,15 +11,15 @@ from bson import ObjectId
 from core.observation.logger import get_logger
 from core.di.decorators import repository
 from core.oxm.mongo.base_repository import BaseRepository
-from infra_layer.adapters.out.persistence.document.memory.personal_event_log import (
-    PersonalEventLog,
+from infra_layer.adapters.out.persistence.document.memory.event_log_record import (
+    EventLogRecord,
 )
 
 logger = get_logger(__name__)
 
 
-@repository("personal_event_log_raw_repository", primary=True)
-class PersonalEventLogRawRepository(BaseRepository[PersonalEventLog]):
+@repository("event_log_record_repository", primary=True)
+class EventLogRecordRawRepository(BaseRepository[EventLogRecord]):
     """
     个人事件日志原始数据仓库
     
@@ -28,15 +28,15 @@ class PersonalEventLogRawRepository(BaseRepository[PersonalEventLog]):
     """
 
     def __init__(self):
-        super().__init__(PersonalEventLog)
+        super().__init__(EventLogRecord)
 
     # ==================== 基础 CRUD 方法 ====================
 
     async def save(
         self,
-        event_log: PersonalEventLog,
+        event_log: EventLogRecord,
         session: Optional[AsyncIOMotorClientSession] = None,
-    ) -> Optional[PersonalEventLog]:
+    ) -> Optional[EventLogRecord]:
         """
         保存个人事件日志
         
@@ -45,7 +45,7 @@ class PersonalEventLogRawRepository(BaseRepository[PersonalEventLog]):
             session: 可选的 MongoDB 会话，用于事务支持
             
         Returns:
-            保存的 PersonalEventLog 或 None
+            保存的 EventLogRecord 或 None
         """
         try:
             await event_log.insert(session=session)
@@ -64,7 +64,7 @@ class PersonalEventLogRawRepository(BaseRepository[PersonalEventLog]):
         self,
         log_id: str,
         session: Optional[AsyncIOMotorClientSession] = None,
-    ) -> Optional[PersonalEventLog]:
+    ) -> Optional[EventLogRecord]:
         """
         根据ID获取个人事件日志
         
@@ -73,7 +73,7 @@ class PersonalEventLogRawRepository(BaseRepository[PersonalEventLog]):
             session: 可选的 MongoDB 会话，用于事务支持
             
         Returns:
-            PersonalEventLog 或 None
+            EventLogRecord 或 None
         """
         try:
             object_id = ObjectId(log_id)
@@ -91,7 +91,7 @@ class PersonalEventLogRawRepository(BaseRepository[PersonalEventLog]):
         self,
         parent_episode_id: str,
         session: Optional[AsyncIOMotorClientSession] = None,
-    ) -> List[PersonalEventLog]:
+    ) -> List[EventLogRecord]:
         """
         根据父情景记忆ID获取所有事件日志
         
@@ -100,7 +100,7 @@ class PersonalEventLogRawRepository(BaseRepository[PersonalEventLog]):
             session: 可选的 MongoDB 会话，用于事务支持
             
         Returns:
-            PersonalEventLog 列表
+            EventLogRecord 列表
         """
         try:
             results = await self.model.find(
@@ -123,7 +123,7 @@ class PersonalEventLogRawRepository(BaseRepository[PersonalEventLog]):
         skip: Optional[int] = None,
         sort_desc: bool = True,
         session: Optional[AsyncIOMotorClientSession] = None,
-    ) -> List[PersonalEventLog]:
+    ) -> List[EventLogRecord]:
         """
         根据用户ID获取事件日志列表
         
@@ -135,7 +135,7 @@ class PersonalEventLogRawRepository(BaseRepository[PersonalEventLog]):
             session: 可选的 MongoDB 会话，用于事务支持
             
         Returns:
-            PersonalEventLog 列表
+            EventLogRecord 列表
         """
         try:
             query = self.model.find({"user_id": user_id}, session=session)
@@ -170,7 +170,7 @@ class PersonalEventLogRawRepository(BaseRepository[PersonalEventLog]):
         skip: Optional[int] = None,
         sort_desc: bool = False,
         session: Optional[AsyncIOMotorClientSession] = None,
-    ) -> List[PersonalEventLog]:
+    ) -> List[EventLogRecord]:
         """
         根据时间范围查询事件日志
         
@@ -184,7 +184,7 @@ class PersonalEventLogRawRepository(BaseRepository[PersonalEventLog]):
             session: 可选的 MongoDB 会话，用于事务支持
             
         Returns:
-            PersonalEventLog 列表
+            EventLogRecord 列表
         """
         try:
             filter_dict = {"timestamp": {"$gte": start_time, "$lt": end_time}}
@@ -277,5 +277,5 @@ class PersonalEventLogRawRepository(BaseRepository[PersonalEventLog]):
 
 
 # 导出
-__all__ = ["PersonalEventLogRawRepository"]
+__all__ = ["EventLogRecordRawRepository"]
 

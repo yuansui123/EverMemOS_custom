@@ -30,7 +30,6 @@ class EventLog:
     """
     Event log data structure containing time and atomic facts.
     """
-
     time: str  # 事件发生时间，格式如 "March 10, 2024(Sunday) at 2:00 PM"
     atomic_fact: List[str]  # 原子事实列表，每个事实是一个完整的句子
     fact_embeddings: List[List[float]] = None  # 每个 atomic_fact 对应的 embedding

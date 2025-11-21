@@ -97,7 +97,7 @@ class MemoryManager:
             temperature=float(os.getenv("LLM_TEMPERATURE", "0.3")),
             max_tokens=int(os.getenv("LLM_MAX_TOKENS", "16384")),
         )
-
+# TODO:添加 username
     async def extract_memcell(
         self,
         history_raw_data_list: list[RawData],
@@ -174,6 +174,7 @@ class MemoryManager:
 
         return memcell, status_result
 
+# TODO:添加 username
     async def extract_memory(
         self,
         memcell_list: list[MemCell],
