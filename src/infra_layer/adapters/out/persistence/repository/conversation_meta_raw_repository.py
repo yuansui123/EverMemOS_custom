@@ -6,7 +6,7 @@ ConversationMeta Raw Repository
 
 import logging
 from typing import Optional, List, Dict, Any
-from motor.motor_asyncio import AsyncIOMotorClientSession
+from pymongo.asynchronous.client_session import AsyncClientSession
 
 from core.oxm.mongo.base_repository import BaseRepository
 from core.di.decorators import repository
@@ -50,7 +50,7 @@ class ConversationMetaRawRepository(BaseRepository[ConversationMeta]):
         return True
 
     async def get_by_group_id(
-        self, group_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, group_id: str, session: Optional[AsyncClientSession] = None
     ) -> Optional[ConversationMeta]:
         """
         根据群组ID获取对话元数据
@@ -78,7 +78,7 @@ class ConversationMetaRawRepository(BaseRepository[ConversationMeta]):
         scene: str,
         limit: Optional[int] = None,
         skip: Optional[int] = None,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> List[ConversationMeta]:
         """
         根据场景标识获取对话元数据列表
@@ -122,7 +122,7 @@ class ConversationMetaRawRepository(BaseRepository[ConversationMeta]):
     async def create_conversation_meta(
         self,
         conversation_meta: ConversationMeta,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[ConversationMeta]:
         """
         创建新的对话元数据
@@ -159,7 +159,7 @@ class ConversationMetaRawRepository(BaseRepository[ConversationMeta]):
         self,
         group_id: str,
         update_data: Dict[str, Any],
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[ConversationMeta]:
         """
         根据群组ID更新对话元数据
@@ -201,7 +201,7 @@ class ConversationMetaRawRepository(BaseRepository[ConversationMeta]):
         self,
         group_id: str,
         conversation_data: Dict[str, Any],
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[ConversationMeta]:
         """
         根据群组ID更新或插入对话元数据
@@ -257,7 +257,7 @@ class ConversationMetaRawRepository(BaseRepository[ConversationMeta]):
             return None
 
     async def delete_by_group_id(
-        self, group_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, group_id: str, session: Optional[AsyncClientSession] = None
     ) -> bool:
         """
         根据群组ID删除对话元数据

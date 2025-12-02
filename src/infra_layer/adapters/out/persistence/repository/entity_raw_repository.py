@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from motor.motor_asyncio import AsyncIOMotorClientSession
+from pymongo.asynchronous.client_session import AsyncClientSession
 from beanie import PydanticObjectId
 from core.oxm.mongo.base_repository import BaseRepository
 from infra_layer.adapters.out.persistence.document.memory.entity import Entity
@@ -24,7 +24,7 @@ class EntityRawRepository(BaseRepository[Entity]):
     # ==================== 基础CRUD操作 ====================
 
     async def get_by_entity_id(
-        self, entity_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, entity_id: str, session: Optional[AsyncClientSession] = None
     ) -> Optional[Entity]:
         """根据实体ID获取实体"""
         try:
@@ -41,7 +41,7 @@ class EntityRawRepository(BaseRepository[Entity]):
             return None
 
     async def get_by_alias(
-        self, alias: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, alias: str, session: Optional[AsyncClientSession] = None
     ) -> List[Entity]:
         """根据别名获取实体列表"""
         try:
@@ -60,7 +60,7 @@ class EntityRawRepository(BaseRepository[Entity]):
         self,
         entity_id: str,
         update_data: Dict[str, Any],
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[Entity]:
         """根据实体ID更新实体"""
         try:
@@ -81,7 +81,7 @@ class EntityRawRepository(BaseRepository[Entity]):
             return None
 
     async def delete_by_entity_id(
-        self, entity_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, entity_id: str, session: Optional[AsyncClientSession] = None
     ) -> bool:
         """根据实体ID删除实体"""
         try:
@@ -102,7 +102,7 @@ class EntityRawRepository(BaseRepository[Entity]):
     # ==================== 批量操作 ====================
 
     async def get_all_entities(
-        self, limit: int = 100, session: Optional[AsyncIOMotorClientSession] = None
+        self, limit: int = 100, session: Optional[AsyncClientSession] = None
     ) -> List[Entity]:
         """获取所有实体"""
         try:
@@ -114,7 +114,7 @@ class EntityRawRepository(BaseRepository[Entity]):
             return []
 
     async def get_entities_by_ids(
-        self, entity_ids: List[str], session: Optional[AsyncIOMotorClientSession] = None
+        self, entity_ids: List[str], session: Optional[AsyncClientSession] = None
     ) -> List[Entity]:
         """根据实体ID列表批量获取实体"""
         try:
@@ -130,7 +130,7 @@ class EntityRawRepository(BaseRepository[Entity]):
     # ==================== 统计方法 ====================
 
     async def count_by_type(
-        self, entity_type: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, entity_type: str, session: Optional[AsyncClientSession] = None
     ) -> int:
         """统计指定类型的实体数量"""
         try:
@@ -143,9 +143,7 @@ class EntityRawRepository(BaseRepository[Entity]):
             logger.error("❌ 统计实体数量失败: %s", e)
             return 0
 
-    async def count_all(
-        self, session: Optional[AsyncIOMotorClientSession] = None
-    ) -> int:
+    async def count_all(self, session: Optional[AsyncClientSession] = None) -> int:
         """统计所有实体数量"""
         try:
             count = await self.model.count()

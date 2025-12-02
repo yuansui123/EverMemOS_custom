@@ -140,6 +140,19 @@ uv run python src/bootstrap.py demo/simple_demo.py
 
 ## 🚀 快速开始
 
+### ⚠️ 重要：记忆语言配置
+
+`MEMORY_LANGUAGE` 控制记忆提取时的 Prompt 语言。**必须与数据文件语言一致，且在启动 API 服务前设置。**
+
+| 数据文件 | 设置 |
+|---------|-----|
+| `*_en.json` | `MEMORY_LANGUAGE=en` |
+| `*_zh.json` | `MEMORY_LANGUAGE=zh` |
+
+> **注意：** 在 `extract_memory.py` 中设置 `MEMORY_LANGUAGE` 无效 - 服务端在启动时读取此配置。语言不匹配会导致中英文混合的记忆。切换语言需重启 API 服务。
+
+---
+
 ### 方式 A：超级简单模式（推荐新手）⭐
 
 体验 EverMemOS 最快的方式！只需 2 个终端：
@@ -313,6 +326,9 @@ MONGODB_URI=mongodb://admin:memsys123@localhost:27017
 - 📘 [批量记忆化使用指南](../docs/dev_docs/run_memorize_usage.md) - 高级用法
 
 ## ❓ 常见问题
+
+### Q: 为什么提取的记忆出现中英文混合？
+**A**: API 服务端的 `MEMORY_LANGUAGE` 与数据文件语言不匹配。在 `.env` 中设置正确的语言（`en` 或 `zh`），然后**重启服务器**并重新提取。
 
 ### Q: 找不到 API 服务器连接？
 **A**: 确保先启动 API 服务器：`uv run python src/bootstrap.py src/run.py --port 8001`

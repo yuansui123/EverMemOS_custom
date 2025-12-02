@@ -410,7 +410,7 @@ def fetch_user_data(user_id: str) -> dict:
 
 ```python
 # ✅ Correct: Using async database driver
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 async def get_user(db, user_id: str):
     return await db.users.find_one({"_id": user_id})
@@ -919,14 +919,14 @@ class MemoryRepository(ABC):
 
 ```python
 # infra_layer/adapters/out/persistence/repository/memory_mongo_repository.py
-from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.asynchronous.database import AsyncDatabase
 from core.ports.memory_repository import MemoryRepository
 from core.domain.memory import Memory
 
 class MemoryMongoRepository(MemoryRepository):
     """MongoDB memory repository implementation"""
     
-    def __init__(self, db: AsyncIOMotorDatabase):
+    def __init__(self, db: AsyncDatabase):
         self._collection = db["memories"]
     
     async def save(self, memory: Memory) -> str:
@@ -986,12 +986,12 @@ class MemoryService:
 
 ```python
 # ❌ Wrong: Business layer directly uses MongoDB driver
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 class MemoryService:
     def __init__(self, db_uri: str):
         # ❌ Business layer should not directly connect to database
-        self._client = AsyncIOMotorClient(db_uri)
+        self._client = AsyncMongoClient(db_uri)
         self._db = self._client["memsys"]
     
     async def create_memory(self, user_id: str, content: str) -> str:
@@ -1023,10 +1023,10 @@ class MemoryRetriever:
 ```python
 # ❌ Wrong: API layer directly accesses database
 from fastapi import APIRouter
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 router = APIRouter()
-db_client = AsyncIOMotorClient("mongodb://localhost")
+db_client = AsyncMongoClient("mongodb://localhost")
 
 @router.get("/memories/{user_id}")
 async def get_memories(user_id: str):
@@ -1054,7 +1054,7 @@ class Container(containers.DeclarativeContainer):
     
     # Database connection
     mongodb_client = providers.Singleton(
-        AsyncIOMotorClient,
+        AsyncMongoClient,
         config.mongodb.uri
     )
     

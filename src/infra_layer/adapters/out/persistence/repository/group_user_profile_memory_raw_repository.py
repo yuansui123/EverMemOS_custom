@@ -7,7 +7,7 @@ GroupUserProfileMemory 原生 CRUD 仓库
 """
 
 from typing import List, Optional, Dict, Any, Tuple
-from motor.motor_asyncio import AsyncIOMotorClientSession
+from pymongo.asynchronous.client_session import AsyncClientSession
 from core.observation.logger import get_logger
 from core.di.decorators import repository
 from core.oxm.mongo.base_repository import BaseRepository
@@ -40,10 +40,7 @@ class GroupUserProfileMemoryRawRepository(BaseRepository[GroupUserProfileMemory]
     # ==================== 版本管理方法 ====================
 
     async def ensure_latest(
-        self,
-        user_id: str,
-        group_id: str,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        self, user_id: str, group_id: str, session: Optional[AsyncClientSession] = None
     ) -> bool:
         """
         确保指定用户在指定群组中的最新版本标记正确
@@ -113,7 +110,7 @@ class GroupUserProfileMemoryRawRepository(BaseRepository[GroupUserProfileMemory]
         user_id: str,
         group_id: str,
         version_range: Optional[Tuple[Optional[str], Optional[str]]] = None,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[GroupUserProfileMemory]:
         """
         根据用户ID和群组ID获取群组用户档案记忆
@@ -166,7 +163,7 @@ class GroupUserProfileMemoryRawRepository(BaseRepository[GroupUserProfileMemory]
     async def batch_get_by_user_groups(
         self,
         user_group_pairs: List[Tuple[str, str]],
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Dict[Tuple[str, str], Optional[GroupUserProfileMemory]]:
         """
         批量根据用户ID和群组ID获取群组用户档案记忆
@@ -213,11 +210,9 @@ class GroupUserProfileMemoryRawRepository(BaseRepository[GroupUserProfileMemory]
             ]
 
             # 执行聚合查询
-            results = (
-                await self.model.get_pymongo_collection()
-                .aggregate(pipeline, session=session)
-                .to_list(length=None)
-            )
+            collection = self.model.get_pymongo_collection()
+            cursor = await collection.aggregate(pipeline, session=session)
+            results = await cursor.to_list(length=None)
 
             # 构建结果字典
             result_dict = {}
@@ -249,7 +244,7 @@ class GroupUserProfileMemoryRawRepository(BaseRepository[GroupUserProfileMemory]
         group_id: str,
         update_data: Dict[str, Any],
         version: Optional[str] = None,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[GroupUserProfileMemory]:
         """
         根据用户ID和群组ID更新群组用户档案记忆
@@ -313,7 +308,7 @@ class GroupUserProfileMemoryRawRepository(BaseRepository[GroupUserProfileMemory]
         user_id: str,
         group_id: str,
         version: Optional[str] = None,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> bool:
         """
         根据用户ID和群组ID删除群组用户档案记忆
@@ -388,7 +383,7 @@ class GroupUserProfileMemoryRawRepository(BaseRepository[GroupUserProfileMemory]
         user_id: str,
         group_id: str,
         update_data: Dict[str, Any],
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[GroupUserProfileMemory]:
         """
         根据用户ID和群组ID更新或插入群组用户档案记忆
@@ -484,7 +479,7 @@ class GroupUserProfileMemoryRawRepository(BaseRepository[GroupUserProfileMemory]
         self,
         user_id: str,
         only_latest: bool = True,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> List[GroupUserProfileMemory]:
         """
         根据用户ID获取该用户在所有群组中的档案记忆
@@ -520,7 +515,7 @@ class GroupUserProfileMemoryRawRepository(BaseRepository[GroupUserProfileMemory]
         self,
         group_id: str,
         only_latest: bool = True,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> List[GroupUserProfileMemory]:
         """
         根据群组ID获取该群组中所有用户的档案记忆
@@ -559,7 +554,7 @@ class GroupUserProfileMemoryRawRepository(BaseRepository[GroupUserProfileMemory]
         user_ids: List[str],
         group_id: Optional[str] = None,
         only_latest: bool = True,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> List[GroupUserProfileMemory]:
         """
         根据用户ID列表批量获取群组用户档案记忆
@@ -605,7 +600,7 @@ class GroupUserProfileMemoryRawRepository(BaseRepository[GroupUserProfileMemory]
         group_ids: List[str],
         user_id: Optional[str] = None,
         only_latest: bool = True,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> List[GroupUserProfileMemory]:
         """
         根据群组ID列表批量获取群组用户档案记忆
@@ -673,7 +668,7 @@ class GroupUserProfileMemoryRawRepository(BaseRepository[GroupUserProfileMemory]
     # ==================== 删除相关方法 ====================
 
     async def delete_by_user_id(
-        self, user_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, user_id: str, session: Optional[AsyncClientSession] = None
     ) -> int:
         """
         删除用户在所有群组中的档案记忆
@@ -703,7 +698,7 @@ class GroupUserProfileMemoryRawRepository(BaseRepository[GroupUserProfileMemory]
             return 0
 
     async def delete_by_group_id(
-        self, group_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, group_id: str, session: Optional[AsyncClientSession] = None
     ) -> int:
         """
         删除群组中所有用户的档案记忆

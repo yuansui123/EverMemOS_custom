@@ -140,6 +140,19 @@ Command-line interface for conversing with memory-enabled AI agents.
 
 ## 🚀 Quick Start
 
+### ⚠️ Important: Memory Language Configuration
+
+`MEMORY_LANGUAGE` controls the prompt language during memory extraction. **Must match your data file language and be set before starting the API server.**
+
+| Data File | Setting |
+|-----------|---------|
+| `*_en.json` | `MEMORY_LANGUAGE=en` |
+| `*_zh.json` | `MEMORY_LANGUAGE=zh` |
+
+> **Note:** Setting `MEMORY_LANGUAGE` in `extract_memory.py` does NOT work - the server reads this at startup. If languages mismatch, you'll get mixed Chinese/English memories. To switch languages, restart the API server after changing the setting.
+
+---
+
 ### Option A: Super Simple Mode (Recommended for Beginners) ⭐
 
 The fastest way to experience EverMemOS! Just 2 terminals:
@@ -311,6 +324,9 @@ MONGODB_URI=mongodb://admin:memsys123@localhost:27017
 - 📘 [Batch Memorization Guide](../docs/dev_docs/run_memorize_usage.md) - Advanced usage
 
 ## ❓ FAQ
+
+### Q: Why are my extracted memories mixed with Chinese and English?
+**A**: The `MEMORY_LANGUAGE` on the API server doesn't match your data file. Set it in `.env` to match your data (`en` or `zh`), then **restart the server** and re-run extraction.
 
 ### Q: Cannot connect to API server?
 **A**: Ensure the API server is running first: `uv run python src/bootstrap.py src/run.py --port 8001`

@@ -1,5 +1,5 @@
 from typing import Optional, Dict, Any
-from motor.motor_asyncio import AsyncIOMotorClientSession
+from pymongo.asynchronous.client_session import AsyncClientSession
 from core.oxm.mongo.base_repository import BaseRepository
 from infra_layer.adapters.out.persistence.document.memory.conversation_status import (
     ConversationStatus,
@@ -24,7 +24,7 @@ class ConversationStatusRawRepository(BaseRepository[ConversationStatus]):
     # ==================== 基础CRUD操作 ====================
 
     async def get_by_group_id(
-        self, group_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, group_id: str, session: Optional[AsyncClientSession] = None
     ) -> Optional[ConversationStatus]:
         """根据群组ID获取对话状态"""
         try:
@@ -39,7 +39,7 @@ class ConversationStatusRawRepository(BaseRepository[ConversationStatus]):
             return None
 
     async def delete_by_group_id(
-        self, group_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, group_id: str, session: Optional[AsyncClientSession] = None
     ) -> bool:
         """根据群组ID删除对话状态"""
         try:
@@ -59,7 +59,7 @@ class ConversationStatusRawRepository(BaseRepository[ConversationStatus]):
         self,
         group_id: str,
         update_data: Dict[str, Any],
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[ConversationStatus]:
         """根据群组ID更新或插入对话状态
 
@@ -141,7 +141,7 @@ class ConversationStatusRawRepository(BaseRepository[ConversationStatus]):
     # ==================== 统计方法 ====================
 
     async def count_by_group_id(
-        self, group_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, group_id: str, session: Optional[AsyncClientSession] = None
     ) -> int:
         """统计指定群组的对话状态数量"""
         try:

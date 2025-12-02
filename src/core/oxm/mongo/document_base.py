@@ -9,7 +9,7 @@ from common_utils.datetime_utils import to_timezone
 from beanie import Document, WriteRules
 from pydantic import model_validator, BaseModel
 from typing import Self, List, Optional
-from motor.motor_asyncio import AsyncIOMotorClientSession
+from pymongo.asynchronous.client_session import AsyncClientSession
 from pymongo.results import InsertManyResult
 
 from core.oxm.mongo.audit_base import AuditBase
@@ -162,7 +162,7 @@ class DocumentBase(Document):
     async def insert_many(
         cls,
         documents: List["DocumentBase"],
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
         link_rule: WriteRules = WriteRules.DO_NOTHING,
         **pymongo_kwargs,
     ) -> InsertManyResult:

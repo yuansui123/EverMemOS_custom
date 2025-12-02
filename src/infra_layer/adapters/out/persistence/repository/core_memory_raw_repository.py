@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any, Tuple, Union
-from motor.motor_asyncio import AsyncIOMotorClientSession
+from pymongo.asynchronous.client_session import AsyncClientSession
 from core.observation.logger import get_logger
 from core.di.decorators import repository
 from core.oxm.mongo.base_repository import BaseRepository
@@ -24,7 +24,7 @@ class CoreMemoryRawRepository(BaseRepository[CoreMemory]):
     # ==================== 版本管理方法 ====================
 
     async def ensure_latest(
-        self, user_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, user_id: str, session: Optional[AsyncClientSession] = None
     ) -> bool:
         """
         确保指定用户的最新版本标记正确
@@ -76,7 +76,7 @@ class CoreMemoryRawRepository(BaseRepository[CoreMemory]):
         self,
         user_id: str,
         version_range: Optional[Tuple[Optional[str], Optional[str]]] = None,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Union[Optional[CoreMemory], List[CoreMemory]]:
         """
         根据用户ID获取核心记忆
@@ -143,7 +143,7 @@ class CoreMemoryRawRepository(BaseRepository[CoreMemory]):
         user_id: str,
         update_data: Dict[str, Any],
         version: Optional[str] = None,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[CoreMemory]:
         """
         根据用户ID更新核心记忆
@@ -200,7 +200,7 @@ class CoreMemoryRawRepository(BaseRepository[CoreMemory]):
         self,
         user_id: str,
         version: Optional[str] = None,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> bool:
         """
         根据用户ID删除核心记忆
@@ -266,7 +266,7 @@ class CoreMemoryRawRepository(BaseRepository[CoreMemory]):
         self,
         user_id: str,
         update_data: Dict[str, Any],
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[CoreMemory]:
         """
         根据用户ID更新或插入核心记忆
@@ -397,7 +397,7 @@ class CoreMemoryRawRepository(BaseRepository[CoreMemory]):
         self,
         user_ids: List[str],
         only_latest: bool = True,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> List[CoreMemory]:
         """
         根据用户ID列表批量获取核心记忆

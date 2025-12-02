@@ -7,9 +7,11 @@ MongoDB 客户端工厂
 
 import os
 import asyncio
+from abc import ABC, abstractmethod
+import traceback
 from typing import Dict, Optional, List
 from urllib.parse import quote_plus
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 from beanie import init_beanie
 from core.class_annotations.utils import get_annotation
 from core.oxm.mongo.constant.annotations import ClassAnnotationKey, Toggle
@@ -122,7 +124,7 @@ class MongoDBConfig:
 class MongoDBClientWrapper:
     """MongoDB 客户端包装器"""
 
-    def __init__(self, client: AsyncIOMotorClient, config: MongoDBConfig):
+    def __init__(self, client: AsyncMongoClient, config: MongoDBConfig):
         self.client = client
         self.config = config
         self.database = client[config.database]
@@ -190,6 +192,7 @@ class MongoDBClientWrapper:
 
             except Exception as e:
                 logger.error("❌ Beanie 初始化失败: %s", e)
+                traceback.print_exc()
                 raise
 
     async def test_connection(self) -> bool:
@@ -231,7 +234,7 @@ class MongoDBClientWrapper:
     async def close(self):
         """关闭连接"""
         if self.client:
-            self.client.close()
+            await self.client.close()
             logger.info("🔌 MongoDB 连接已关闭: %s", self.config)
 
     @property
@@ -240,9 +243,96 @@ class MongoDBClientWrapper:
         return self._initialized
 
 
-@component(name="mongodb_client_factory", primary=True)
-class MongoDBClientFactory:
-    """MongoDB 客户端工厂"""
+class MongoDBClientFactory(ABC):
+    """MongoDB 客户端工厂接口"""
+
+    @abstractmethod
+    async def get_client(
+        self, config: Optional[MongoDBConfig] = None, **connection_kwargs
+    ) -> MongoDBClientWrapper:
+        """
+        获取 MongoDB 客户端
+
+        Args:
+            config: MongoDB 配置，如果为 None 则使用默认配置
+            **connection_kwargs: 额外的连接参数
+
+        Returns:
+            MongoDBClientWrapper: MongoDB 客户端包装器
+        """
+        ...
+
+    @abstractmethod
+    async def get_default_client(self) -> MongoDBClientWrapper:
+        """
+        获取默认 MongoDB 客户端
+
+        Returns:
+            MongoDBClientWrapper: 默认 MongoDB 客户端包装器
+        """
+        ...
+
+    @abstractmethod
+    async def get_named_client(self, name: str) -> MongoDBClientWrapper:
+        """
+        按名称获取 MongoDB 客户端。
+
+        约定：name 作为环境变量前缀，从 "{name}_MONGODB_XXX" 读取配置。
+        例如 name="A" 时，将尝试读取 "A_MONGODB_URI"、"A_MONGODB_HOST" 等。
+
+        Args:
+            name: 前缀名称（即环境变量前缀）
+
+        Returns:
+            MongoDBClientWrapper: MongoDB 客户端包装器
+        """
+        ...
+
+    @abstractmethod
+    async def create_client_with_config(
+        self,
+        host: str = "localhost",
+        port: int = 27017,
+        username: Optional[str] = None,
+        password: Optional[str] = None,
+        database: str = "memsys",
+        **kwargs,
+    ) -> MongoDBClientWrapper:
+        """
+        使用指定配置创建客户端
+
+        Args:
+            host: MongoDB 主机
+            port: MongoDB 端口
+            username: 用户名
+            password: 密码
+            database: 数据库名
+            **kwargs: 其他连接参数
+
+        Returns:
+            MongoDBClientWrapper: MongoDB 客户端包装器
+        """
+        ...
+
+    @abstractmethod
+    async def close_client(self, config: Optional[MongoDBConfig] = None):
+        """
+        关闭指定客户端
+
+        Args:
+            config: 配置，如果为 None 则关闭默认客户端
+        """
+        ...
+
+    @abstractmethod
+    async def close_all_clients(self):
+        """关闭所有客户端"""
+        ...
+
+
+@component(name="mongodb_client_factory")
+class MongoDBClientFactoryImpl(MongoDBClientFactory):
+    """MongoDB 客户端工厂实现类"""
 
     def __init__(self):
         """初始化工厂"""
@@ -280,7 +370,9 @@ class MongoDBClientFactory:
 
             # 合并连接参数
             conn_kwargs = {
-                "serverSelectionTimeoutMS": 5000,
+                "serverSelectionTimeoutMS": 10000,  # PyMongo AsyncMongoClient 需要更长的超时时间
+                "connectTimeoutMS": 10000,  # 连接超时
+                "socketTimeoutMS": 10000,  # socket 超时
                 "maxPoolSize": 50,
                 "minPoolSize": 5,
                 "tz_aware": True,
@@ -290,9 +382,7 @@ class MongoDBClientFactory:
             }
 
             try:
-                client = AsyncIOMotorClient(
-                    config.get_connection_string(), **conn_kwargs
-                )
+                client = AsyncMongoClient(config.get_connection_string(), **conn_kwargs)
 
                 client_wrapper = MongoDBClientWrapper(client, config)
 
@@ -344,7 +434,7 @@ class MongoDBClientFactory:
         return await self.get_client(config)
 
     async def _get_default_config(self) -> MongoDBConfig:
-        """获取默认配置"""
+        """获取默认配置（内部方法）"""
         if self._default_config is None:
             self._default_config = MongoDBConfig.from_env()
             logger.info("📋 加载默认 MongoDB 配置: %s", self._default_config)
@@ -417,25 +507,3 @@ class MongoDBClientFactory:
                 self._default_client = None
 
             logger.info("🔌 所有 MongoDB 客户端已关闭")
-
-    def get_cached_clients_info(self) -> Dict[str, Dict]:
-        """获取缓存的客户端信息"""
-        return {
-            cache_key: {
-                "config": str(wrapper.config),
-                "initialized": wrapper.is_initialized,
-                "document_models": [
-                    model.__name__ for model in wrapper._document_models
-                ],  # pylint: disable=protected-access
-            }
-            for cache_key, wrapper in self._clients.items()
-        }
-
-    async def get_default_mongodb_client(self) -> MongoDBClientWrapper:
-        """
-        获取默认 MongoDB 客户端的便捷函数
-
-        Returns:
-            MongoDBClientWrapper: 默认 MongoDB 客户端包装器
-        """
-        return await self.get_default_client()

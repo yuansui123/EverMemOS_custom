@@ -6,7 +6,7 @@ EventLogRecord Repository
 
 from datetime import datetime
 from typing import List, Optional, Type, TypeVar, Union
-from motor.motor_asyncio import AsyncIOMotorClientSession
+from pymongo.asynchronous.client_session import AsyncClientSession
 from bson import ObjectId
 from core.observation.logger import get_logger
 from core.di.decorators import repository
@@ -37,9 +37,7 @@ class EventLogRecordRawRepository(BaseRepository[EventLogRecord]):
     # ==================== 基础 CRUD 方法 ====================
 
     async def save(
-        self,
-        event_log: EventLogRecord,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        self, event_log: EventLogRecord, session: Optional[AsyncClientSession] = None
     ) -> Optional[EventLogRecord]:
         """
         保存个人事件日志
@@ -67,7 +65,7 @@ class EventLogRecordRawRepository(BaseRepository[EventLogRecord]):
     async def get_by_id(
         self,
         log_id: str,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
         model: Optional[Type[T]] = None,
     ) -> Optional[Union[EventLogRecord, EventLogRecordProjection]]:
         """
@@ -111,7 +109,7 @@ class EventLogRecordRawRepository(BaseRepository[EventLogRecord]):
     async def get_by_parent_episode_id(
         self,
         parent_episode_id: str,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
         model: Optional[Type[T]] = None,
     ) -> List[Union[EventLogRecord, EventLogRecordProjection]]:
         """
@@ -159,7 +157,7 @@ class EventLogRecordRawRepository(BaseRepository[EventLogRecord]):
         limit: Optional[int] = None,
         skip: Optional[int] = None,
         sort_desc: bool = True,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
         model: Optional[Type[T]] = None,
     ) -> List[Union[EventLogRecord, EventLogRecordProjection]]:
         """
@@ -218,7 +216,7 @@ class EventLogRecordRawRepository(BaseRepository[EventLogRecord]):
         limit: Optional[int] = None,
         skip: Optional[int] = None,
         sort_desc: bool = False,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
         model: Optional[Type[T]] = None,
     ) -> List[Union[EventLogRecord, EventLogRecordProjection]]:
         """
@@ -277,7 +275,7 @@ class EventLogRecordRawRepository(BaseRepository[EventLogRecord]):
             return []
 
     async def delete_by_id(
-        self, log_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, log_id: str, session: Optional[AsyncClientSession] = None
     ) -> bool:
         """
         根据ID删除个人事件日志
@@ -305,9 +303,7 @@ class EventLogRecordRawRepository(BaseRepository[EventLogRecord]):
             return False
 
     async def delete_by_parent_episode_id(
-        self,
-        parent_episode_id: str,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        self, parent_episode_id: str, session: Optional[AsyncClientSession] = None
     ) -> int:
         """
         根据父情景记忆ID删除所有事件日志

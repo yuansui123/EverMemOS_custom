@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from typing import Optional, TypeVar, Generic, Type, Union, List
 from beanie import PydanticObjectId
 from core.oxm.mongo.document_base import DocumentBase
-from motor.motor_asyncio import AsyncIOMotorClientSession
+from pymongo.asynchronous.client_session import AsyncClientSession
 from core.observation.logger import get_logger
 
 logger = get_logger(__name__)
@@ -56,9 +56,9 @@ class BaseRepository(ABC, Generic[T]):
                 # 自动提交或回滚
 
         Yields:
-            AsyncIOMotorClientSession: MongoDB 会话对象
+            AsyncClientSession: MongoDB 会话对象
         """
-        client = self.model.get_motor_client()
+        client = self.model.get_pymongo_client()
         async with await client.start_session() as session:
             async with session.start_transaction():
                 try:
@@ -69,12 +69,12 @@ class BaseRepository(ABC, Generic[T]):
                     logger.error("❌ MongoDB 事务回滚 [%s]: %s", self.model_name, e)
                     raise
 
-    async def start_session(self) -> AsyncIOMotorClientSession:
+    async def start_session(self) -> AsyncClientSession:
         """
         开始一个新的会话（不开启事务）
 
         Returns:
-            AsyncIOMotorClientSession: MongoDB 会话对象
+            AsyncClientSession: MongoDB 会话对象
 
         Note:
             使用完毕后需要手动关闭会话：
@@ -85,7 +85,7 @@ class BaseRepository(ABC, Generic[T]):
             finally:
                 await session.end_session()
         """
-        client = self.model.get_motor_client()
+        client = self.model.get_pymongo_client()
         session = await client.start_session()
         logger.info("🔄 创建 MongoDB 会话 [%s]", self.model_name)
         return session
@@ -93,7 +93,7 @@ class BaseRepository(ABC, Generic[T]):
     # ==================== 基础 CRUD 模板方法 ====================
 
     async def create(
-        self, document: T, session: Optional[AsyncIOMotorClientSession] = None
+        self, document: T, session: Optional[AsyncClientSession] = None
     ) -> T:
         """
         创建新文档
@@ -136,7 +136,7 @@ class BaseRepository(ABC, Generic[T]):
             return None
 
     async def update(
-        self, document: T, session: Optional[AsyncIOMotorClientSession] = None
+        self, document: T, session: Optional[AsyncClientSession] = None
     ) -> T:
         """
         更新文档
@@ -163,7 +163,7 @@ class BaseRepository(ABC, Generic[T]):
     async def delete_by_id(
         self,
         object_id: Union[str, PydanticObjectId],
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> bool:
         """
         根据 ObjectId 删除文档
@@ -187,7 +187,7 @@ class BaseRepository(ABC, Generic[T]):
             return False
 
     async def delete(
-        self, document: T, session: Optional[AsyncIOMotorClientSession] = None
+        self, document: T, session: Optional[AsyncClientSession] = None
     ) -> bool:
         """
         删除文档实例
@@ -214,7 +214,7 @@ class BaseRepository(ABC, Generic[T]):
     # ==================== 批量操作 ====================
 
     async def create_batch(
-        self, documents: List[T], session: Optional[AsyncIOMotorClientSession] = None
+        self, documents: List[T], session: Optional[AsyncClientSession] = None
     ) -> List[T]:
         """
         批量创建文档

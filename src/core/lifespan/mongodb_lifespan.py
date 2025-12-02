@@ -5,16 +5,14 @@ MongoDB 生命周期提供者实现
 from collections import defaultdict
 from fastapi import FastAPI
 from typing import Any
-import os
 
 from core.observation.logger import get_logger
-from core.di.utils import get_bean
+from core.di.utils import get_bean_by_type
 from core.di.decorators import component
 from core.lifespan.lifespan_interface import LifespanProvider
 from core.oxm.mongo.document_base import DocumentBase
 from core.di.utils import get_all_subclasses
-from component.mongodb_client_factory import MongoDBClientWrapper
-from core.oxm.mongo.migration.manager import MigrationManager
+from component.mongodb_client_factory import MongoDBClientFactory, MongoDBClientWrapper
 
 
 logger = get_logger(__name__)
@@ -51,7 +49,7 @@ class MongoDBLifespanProvider(LifespanProvider):
         try:
 
             # 获取 MongoDB 客户端工厂
-            self._mongodb_factory = get_bean("mongodb_client_factory")
+            self._mongodb_factory = get_bean_by_type(MongoDBClientFactory)
 
             # 获取默认客户端
             self._mongodb_client: MongoDBClientWrapper = (
@@ -81,9 +79,6 @@ class MongoDBLifespanProvider(LifespanProvider):
 
             logger.info("✅ MongoDB 连接初始化完成")
 
-            # 在启动流程的最后执行可选的迁移步骤
-            self._run_mongodb_migrations_if_enabled()
-
         except Exception as e:
             logger.error("❌ MongoDB 初始化过程中出错: %s", str(e))
             raise
@@ -108,43 +103,3 @@ class MongoDBLifespanProvider(LifespanProvider):
         for attr in ['mongodb_clients', 'mongodb_factory']:
             if hasattr(app.state, attr):
                 delattr(app.state, attr)
-
-    def _run_mongodb_migrations_if_enabled(self) -> None:
-        """
-        如果开启了启动时迁移开关，则执行 MongoDB 迁移。
-
-        该步骤在启动流程的最后执行，避免影响核心连接与模型初始化流程。
-        """
-        if (
-            str(os.getenv("MONGODB_RUN_MIGRATIONS_ON_STARTUP", "true")).lower()
-            != "true"
-        ):
-            return
-
-        distance_env = os.getenv("MONGODB_MIGRATIONS_DISTANCE")
-        backward_flag = (
-            str(os.getenv("MONGODB_MIGRATIONS_BACKWARD", "false")).lower() == "true"
-        )
-        no_tx_flag = (
-            str(os.getenv("MONGODB_MIGRATIONS_NO_USE_TRANSACTION", "false")).lower()
-            == "true"
-        )
-
-        try:
-            migration_manager = MigrationManager(
-                use_transaction=not no_tx_flag,
-                distance=(
-                    int(distance_env)
-                    if distance_env and distance_env.isdigit()
-                    else None
-                ),
-                backward=backward_flag,
-            )
-        except ValueError as e:
-            logger.error("MongoDB 迁移参数无效: %s", str(e))
-            return
-
-        logger.info("检测到启动时迁移开关已开启，开始执行 MongoDB 迁移 ...")
-        exit_code = migration_manager.run_migration()
-        if exit_code != 0:
-            logger.warning("MongoDB 迁移进程返回非零退出码: %s", exit_code)

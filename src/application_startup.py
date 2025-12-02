@@ -7,11 +7,11 @@
 # 导入依赖注入相关模块
 from core.observation.logger import get_logger
 from core.addons.addons_registry import ADDONS_REGISTRY
-from core.addons.contrib.di_setup import (
+from core.addons.addonize.di_setup import (
     setup_dependency_injection,
     print_registered_beans,
 )
-from core.addons.contrib.asynctasks_setup import (
+from core.addons.addonize.asynctasks_setup import (
     setup_async_tasks,
     print_registered_tasks,
 )

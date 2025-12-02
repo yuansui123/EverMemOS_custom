@@ -15,6 +15,7 @@ paths_registry.add_scan_path(
 paths_registry.add_scan_path(os.path.join(get_base_scan_path(), "core/lifespan"))
 paths_registry.add_scan_path(os.path.join(get_base_scan_path(), "core/lock"))
 paths_registry.add_scan_path(os.path.join(get_base_scan_path(), "core/cache"))
+paths_registry.add_scan_path(os.path.join(get_base_scan_path(), "core/tenants"))
 paths_registry.add_scan_path(os.path.join(get_base_scan_path(), "component"))
 paths_registry.add_scan_path(os.path.join(get_base_scan_path(), "infra_layer"))
 paths_registry.add_scan_path(os.path.join(get_base_scan_path(), "agentic_layer"))

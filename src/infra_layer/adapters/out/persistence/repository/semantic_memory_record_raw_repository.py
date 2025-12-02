@@ -5,7 +5,7 @@ SemanticMemoryRecord Repository
 """
 
 from typing import List, Optional, Type, TypeVar, Union
-from motor.motor_asyncio import AsyncIOMotorClientSession
+from pymongo.asynchronous.client_session import AsyncClientSession
 from bson import ObjectId
 from core.observation.logger import get_logger
 from core.di.decorators import repository
@@ -38,7 +38,7 @@ class SemanticMemoryRecordRawRepository(BaseRepository[SemanticMemoryRecord]):
     async def save(
         self,
         semantic_memory: SemanticMemoryRecord,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[SemanticMemoryRecord]:
         """
         保存个人语义记忆
@@ -66,7 +66,7 @@ class SemanticMemoryRecordRawRepository(BaseRepository[SemanticMemoryRecord]):
     async def get_by_id(
         self,
         memory_id: str,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
         model: Optional[Type[T]] = None,
     ) -> Optional[Union[SemanticMemoryRecord, SemanticMemoryRecordProjection]]:
         """
@@ -110,7 +110,7 @@ class SemanticMemoryRecordRawRepository(BaseRepository[SemanticMemoryRecord]):
     async def get_by_parent_episode_id(
         self,
         parent_episode_id: str,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
         model: Optional[Type[T]] = None,
     ) -> List[Union[SemanticMemoryRecord, SemanticMemoryRecordProjection]]:
         """
@@ -157,7 +157,7 @@ class SemanticMemoryRecordRawRepository(BaseRepository[SemanticMemoryRecord]):
         user_id: str,
         limit: Optional[int] = None,
         skip: Optional[int] = None,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
         model: Optional[Type[T]] = None,
     ) -> List[Union[SemanticMemoryRecord, SemanticMemoryRecordProjection]]:
         """
@@ -203,7 +203,7 @@ class SemanticMemoryRecordRawRepository(BaseRepository[SemanticMemoryRecord]):
             return []
 
     async def delete_by_id(
-        self, memory_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, memory_id: str, session: Optional[AsyncClientSession] = None
     ) -> bool:
         """
         根据ID删除个人语义记忆
@@ -231,9 +231,7 @@ class SemanticMemoryRecordRawRepository(BaseRepository[SemanticMemoryRecord]):
             return False
 
     async def delete_by_parent_episode_id(
-        self,
-        parent_episode_id: str,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        self, parent_episode_id: str, session: Optional[AsyncClientSession] = None
     ) -> int:
         """
         根据父情景记忆ID删除所有语义记忆

@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from motor.motor_asyncio import AsyncIOMotorClientSession
+from pymongo.asynchronous.client_session import AsyncClientSession
 from beanie import PydanticObjectId
 from core.oxm.mongo.base_repository import BaseRepository
 from infra_layer.adapters.out.persistence.document.memory.behavior_history import (
@@ -29,7 +29,7 @@ class BehaviorHistoryRawRepository(BaseRepository[BehaviorHistory]):
         self,
         user_id: str,
         limit: int = 100,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> List[BehaviorHistory]:
         """根据用户ID获取行为历史列表"""
         try:
@@ -53,7 +53,7 @@ class BehaviorHistoryRawRepository(BaseRepository[BehaviorHistory]):
         end_timestamp: int,
         user_id: Optional[str] = None,
         limit: int = 100,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> List[BehaviorHistory]:
         """根据时间范围获取行为历史列表"""
         try:
@@ -81,7 +81,7 @@ class BehaviorHistoryRawRepository(BaseRepository[BehaviorHistory]):
     async def append_behavior(
         self,
         behavior_history: BehaviorHistory,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[BehaviorHistory]:
         """追加新的行为历史"""
         try:
@@ -97,10 +97,7 @@ class BehaviorHistoryRawRepository(BaseRepository[BehaviorHistory]):
             return None
 
     async def delete_by_user_and_timestamp(
-        self,
-        user_id: str,
-        timestamp: int,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        self, user_id: str, timestamp: int, session: Optional[AsyncClientSession] = None
     ) -> bool:
         """根据用户ID和时间戳删除行为历史"""
         try:
@@ -131,7 +128,7 @@ class BehaviorHistoryRawRepository(BaseRepository[BehaviorHistory]):
         user_id: str,
         hours: int = 24,
         limit: int = 100,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> List[BehaviorHistory]:
         """获取用户最近N小时的行为历史"""
         try:
@@ -161,7 +158,7 @@ class BehaviorHistoryRawRepository(BaseRepository[BehaviorHistory]):
     # ==================== 统计方法 ====================
 
     async def count_by_user(
-        self, user_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, user_id: str, session: Optional[AsyncClientSession] = None
     ) -> int:
         """统计用户的行为历史数量"""
         try:
@@ -179,7 +176,7 @@ class BehaviorHistoryRawRepository(BaseRepository[BehaviorHistory]):
         start_timestamp: int,
         end_timestamp: int,
         user_id: Optional[str] = None,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> int:
         """统计时间范围内的行为历史数量"""
         try:

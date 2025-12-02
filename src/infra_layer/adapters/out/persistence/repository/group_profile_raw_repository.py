@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any, Tuple
-from motor.motor_asyncio import AsyncIOMotorClientSession
+from pymongo.asynchronous.client_session import AsyncClientSession
 from core.observation.logger import get_logger
 from core.di.decorators import repository
 from core.oxm.mongo.base_repository import BaseRepository
@@ -25,7 +25,7 @@ class GroupProfileRawRepository(BaseRepository[GroupProfile]):
     # ==================== 版本管理方法 ====================
 
     async def ensure_latest(
-        self, group_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, group_id: str, session: Optional[AsyncClientSession] = None
     ) -> bool:
         """
         确保指定群组的最新版本标记正确
@@ -77,7 +77,7 @@ class GroupProfileRawRepository(BaseRepository[GroupProfile]):
         self,
         group_id: str,
         version_range: Optional[Tuple[Optional[str], Optional[str]]] = None,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[GroupProfile]:
         """
         根据群组ID获取群组记忆
@@ -128,7 +128,7 @@ class GroupProfileRawRepository(BaseRepository[GroupProfile]):
         group_id: str,
         update_data: Dict[str, Any],
         version: Optional[str] = None,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[GroupProfile]:
         """
         根据群组ID更新群组记忆
@@ -185,7 +185,7 @@ class GroupProfileRawRepository(BaseRepository[GroupProfile]):
         self,
         group_id: str,
         version: Optional[str] = None,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> bool:
         """
         根据群组ID删除群组记忆
@@ -251,7 +251,7 @@ class GroupProfileRawRepository(BaseRepository[GroupProfile]):
         group_id: str,
         update_data: Dict[str, Any],
         timestamp: Optional[int] = None,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[GroupProfile]:
         """
         根据群组ID更新或插入群组记忆
@@ -345,7 +345,7 @@ class GroupProfileRawRepository(BaseRepository[GroupProfile]):
         self,
         group_ids: List[str],
         only_latest: bool = True,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> List[GroupProfile]:
         """
         根据群组ID列表批量获取群组记忆

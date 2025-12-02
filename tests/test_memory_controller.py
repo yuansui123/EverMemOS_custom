@@ -17,6 +17,11 @@ Memory Controller API 测试脚本
     python tests/test_memory_controller.py --test-method fetch_episodic
     python tests/test_memory_controller.py --test-method fetch_event_log
     python tests/test_memory_controller.py --test-method search_keyword
+    
+    # 测试除了某些方法之外的所有方法（参数用逗号分隔）
+    python tests/test_memory_controller.py --except-test-method memorize
+    python tests/test_memory_controller.py --except-test-method memorize,fetch_episodic
+    python tests/test_memory_controller.py --except-test-method save_meta,patch_meta
 """
 
 import argparse
@@ -767,7 +772,7 @@ class MemoryControllerTester:
 
         return status_code, response
 
-    def run_all_tests(self, test_method: str = "all"):
+    def run_all_tests(self, test_method: str = "all", except_test_methods: str = None):
         """
         运行测试
 
@@ -783,6 +788,8 @@ class MemoryControllerTester:
                 - search_hybrid: 测试混合检索
                 - save_meta: 测试保存对话元数据
                 - patch_meta: 测试更新对话元数据
+            except_test_methods: 指定要排除的测试方法（用逗号分隔），例如: "memorize,fetch_episodic"
+                当指定此参数时，将运行除了这些方法之外的所有测试
         """
         print("\n" + "=" * 80)
         print("  开始执行 Memory Controller API 测试")
@@ -791,6 +798,8 @@ class MemoryControllerTester:
         print(f"  测试用户: {self.user_id}")
         print(f"  测试群组: {self.group_id}")
         print(f"  测试方法: {test_method}")
+        if except_test_methods:
+            print(f"  排除方法: {except_test_methods}")
         print("=" * 80)
 
         # 定义测试方法映射
@@ -806,9 +815,35 @@ class MemoryControllerTester:
             "patch_meta": self.test_patch_conversation_meta,
         }
 
+        # 解析排除的测试方法列表
+        excluded_methods = set()
+        if except_test_methods:
+            excluded_list = [m.strip() for m in except_test_methods.split(",")]
+            for method_name in excluded_list:
+                if method_name not in test_methods:
+                    print(f"\n⚠️  警告: 未知的测试方法 '{method_name}'，将被忽略")
+                else:
+                    excluded_methods.add(method_name)
+
         # 执行测试
         try:
-            if test_method == "all":
+            if except_test_methods:
+                # except-test-method 模式：运行除了指定方法之外的所有测试
+                methods_to_run = [
+                    (name, method)
+                    for name, method in test_methods.items()
+                    if name not in excluded_methods
+                ]
+                if not methods_to_run:
+                    print("\n⚠️  没有需要运行的测试方法（所有方法都被排除）")
+                    return
+
+                print(
+                    f"\n📋 将运行 {len(methods_to_run)} 个测试方法（排除了 {len(excluded_methods)} 个）"
+                )
+                for name, method in methods_to_run:
+                    method()
+            elif test_method == "all":
                 # 运行所有测试
                 for method in test_methods.values():
                     method()
@@ -827,7 +862,9 @@ class MemoryControllerTester:
 
         # 测试完成
         self.print_section("测试完成")
-        if test_method == "all":
+        if except_test_methods:
+            print(f"\n✅ 已完成除了 [{except_test_methods}] 之外的所有测试！")
+        elif test_method == "all":
             print("\n✅ 所有接口结构验证通过！")
         else:
             print(f"\n✅ 测试方法 [{test_method}] 验证通过！")
@@ -855,6 +892,11 @@ def parse_args():
   python tests/test_memory_controller.py --test-method fetch_episodic
   python tests/test_memory_controller.py --test-method fetch_event_log
   python tests/test_memory_controller.py --test-method search_keyword
+
+  # 测试除了某些方法之外的所有方法（参数用逗号分隔）
+  python tests/test_memory_controller.py --except-test-method memorize
+  python tests/test_memory_controller.py --except-test-method memorize,fetch_episodic
+  python tests/test_memory_controller.py --except-test-method save_meta,patch_meta
 
   # 指定所有参数
   python tests/test_memory_controller.py --base-url http://dev-server:1995 --user-id test_user --group-id test_group --timeout 60
@@ -884,7 +926,6 @@ def parse_args():
             "fetch_episodic",
             "fetch_semantic",
             "fetch_event_log",
-            "fetch_profile",
             "search_keyword",
             "search_vector",
             "search_hybrid",
@@ -894,6 +935,12 @@ def parse_args():
         help="指定要运行的测试方法 (默认: all 运行所有测试)",
     )
 
+    parser.add_argument(
+        "--except-test-method",
+        default=None,
+        help="指定要排除的测试方法（用逗号分隔），运行除了这些方法之外的所有测试。例如: --except-test-method memorize,fetch_episodic",
+    )
+
     return parser.parse_args()
 
 
@@ -901,6 +948,14 @@ def main():
     """主函数"""
     # 解析命令行参数
     args = parse_args()
+
+    # 检查参数冲突：不能同时指定 --test-method 和 --except-test-method
+    if args.test_method != "all" and args.except_test_method:
+        print("❌ 错误: 不能同时使用 --test-method 和 --except-test-method")
+        print("   请选择其中一个使用：")
+        print("   - 使用 --test-method 指定要运行的单个测试")
+        print("   - 使用 --except-test-method 指定要排除的测试（运行其他所有测试）")
+        return
 
     # 如果未提供 user_id，随机生成一个
     user_id = args.user_id if args.user_id else f"user_{uuid.uuid4().hex[:12]}"
@@ -919,8 +974,10 @@ def main():
         base_url=args.base_url, user_id=user_id, group_id=group_id, timeout=args.timeout
     )
 
-    # 运行测试（根据参数决定运行全部还是单个）
-    tester.run_all_tests(test_method=args.test_method)
+    # 运行测试（根据参数决定运行全部还是单个，或者排除某些测试）
+    tester.run_all_tests(
+        test_method=args.test_method, except_test_methods=args.except_test_method
+    )
 
 
 if __name__ == "__main__":

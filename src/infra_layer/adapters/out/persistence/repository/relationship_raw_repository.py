@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from motor.motor_asyncio import AsyncIOMotorClientSession
+from pymongo.asynchronous.client_session import AsyncClientSession
 from beanie import PydanticObjectId
 from core.oxm.mongo.base_repository import BaseRepository
 from infra_layer.adapters.out.persistence.document.memory.relationship import (
@@ -29,7 +29,7 @@ class RelationshipRawRepository(BaseRepository[Relationship]):
         self,
         source_entity_id: str,
         target_entity_id: str,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[Relationship]:
         """根据源实体ID和目标实体ID获取关系"""
         try:
@@ -61,7 +61,7 @@ class RelationshipRawRepository(BaseRepository[Relationship]):
         self,
         source_entity_id: str,
         limit: int = 100,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> List[Relationship]:
         """根据源实体ID获取所有关系"""
         try:
@@ -86,7 +86,7 @@ class RelationshipRawRepository(BaseRepository[Relationship]):
         self,
         target_entity_id: str,
         limit: int = 100,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> List[Relationship]:
         """根据目标实体ID获取所有关系"""
         try:
@@ -112,7 +112,7 @@ class RelationshipRawRepository(BaseRepository[Relationship]):
         source_entity_id: str,
         target_entity_id: str,
         update_data: Dict[str, Any],
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[Relationship]:
         """根据实体ID更新关系"""
         try:
@@ -148,7 +148,7 @@ class RelationshipRawRepository(BaseRepository[Relationship]):
         self,
         source_entity_id: str,
         target_entity_id: str,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> bool:
         """根据实体ID删除关系"""
         try:
@@ -184,7 +184,7 @@ class RelationshipRawRepository(BaseRepository[Relationship]):
         self,
         entity_id: str,
         limit: int = 100,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> List[Relationship]:
         """获取与指定实体相关的所有关系（作为源或目标）"""
         try:
@@ -212,7 +212,7 @@ class RelationshipRawRepository(BaseRepository[Relationship]):
     # ==================== 统计方法 ====================
 
     async def count_by_entity(
-        self, entity_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, entity_id: str, session: Optional[AsyncClientSession] = None
     ) -> int:
         """统计与指定实体相关的关系数量"""
         try:
@@ -233,9 +233,7 @@ class RelationshipRawRepository(BaseRepository[Relationship]):
             logger.error("❌ 统计实体关系数量失败: %s", e)
             return 0
 
-    async def count_all(
-        self, session: Optional[AsyncIOMotorClientSession] = None
-    ) -> int:
+    async def count_all(self, session: Optional[AsyncClientSession] = None) -> int:
         """统计所有关系数量"""
         try:
             count = await self.model.count()

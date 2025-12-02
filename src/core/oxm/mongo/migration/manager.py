@@ -49,7 +49,7 @@ class Forward:
     # @free_fall_migration(document_models=[YourModel])
     # async def create_indexes(self, session):
     #     # Get collection
-    #     collection = YourModel.get_motor_collection()
+    #     collection = YourModel.get_pymongo_collection()
     #     
     #     # Create indexes
     #     indexes = [
@@ -69,7 +69,7 @@ class Backward:
     
     # @free_fall_migration(document_models=[YourModel])
     # async def drop_indexes(self, session):
-    #     collection = YourModel.get_motor_collection()
+    #     collection = YourModel.get_pymongo_collection()
     #     await collection.drop_index("idx_field_name")
     
     pass
@@ -113,8 +113,8 @@ class Backward:
 
         self._ensure_migrations_dir()
 
-    @staticmethod
-    def _get_mongodb_uri() -> str:
+    @classmethod
+    def _get_mongodb_uri(cls) -> str:
         """Get MongoDB URI from environment variables"""
         base_uri = None
         if uri := os.getenv("MONGODB_URI"):
@@ -125,7 +125,7 @@ class Backward:
             port = os.getenv("MONGODB_PORT", "27017")
             username = os.getenv("MONGODB_USERNAME", "")
             password = os.getenv("MONGODB_PASSWORD", "")
-            database = os.getenv("MONGODB_DATABASE", "memsys")
+            database = cls._get_mongodb_database()
 
             if username and password:
                 base_uri = f"mongodb://{username}:{password}@{host}:{port}/{database}"
@@ -216,13 +216,21 @@ class Backward:
         logger.info(f"📍 数据库: {self.database}")
         logger.info(f"📁 迁移目录: {self.migrations_path}")
 
+        # 检查迁移目录中是否有迁移文件
+        migration_files = list(self.migrations_path.glob("*.py"))
+        migration_files = [f for f in migration_files if not f.name.startswith("_")]
+        if not migration_files:
+            logger.info("🧭 迁移目录中没有迁移文件，跳过迁移")
+            return 0
+        logger.info(f"📄 发现 {len(migration_files)} 个迁移文件")
+
         # Snapshot migration logs before running
         before_names, before_current = self._snapshot_migration_log()
-        if not before_names:
-            logger.info("🧭 没有迁移记录，跳过迁移")
-            return 0
-        logger.info(f"🧭 迁移前记录数量: {len(before_names)}")
-        logger.info(f"⭐ 迁移前当前指针: {before_current}")
+        if before_names is not None:
+            logger.info(f"🧭 迁移前记录数量: {len(before_names)}")
+            logger.info(f"⭐ 迁移前当前指针: {before_current or '<无>'}")
+        else:
+            logger.info("🧭 migrations_log 集合尚未初始化（首次迁移）")
         try:
             # Execute command
             if self.stream_output:
@@ -371,3 +379,46 @@ class Backward:
             return
         logger.info("📜 已记录迁移脚本(%d): %s", len(names), ", ".join(sorted(names)))
         logger.info("⭐ 当前指针: %s", current or "<无>")
+
+    @classmethod
+    def run_migrations_on_startup(cls, enabled: bool = True) -> int:
+        """
+        在应用启动时执行 MongoDB 数据库迁移
+
+        使用默认配置（从环境变量读取连接信息）执行所有待执行的迁移脚本
+
+        Args:
+            enabled: 是否启用迁移，False 则跳过迁移步骤
+
+        Returns:
+            int: 迁移执行的退出码，0 表示成功，-1 表示跳过
+        """
+        if not enabled:
+            logger.info("MongoDB 启动时迁移已禁用，跳过迁移步骤")
+            return -1
+
+        logger.info("正在执行 MongoDB 数据库迁移...")
+
+        try:
+            # 创建迁移管理器实例，使用默认配置
+            migration_manager = cls(
+                use_transaction=False,  # 默认不使用事务
+                distance=None,  # 执行所有待执行的迁移
+                backward=False,  # 不进行回滚
+                stream_output=True,  # 实时输出
+            )
+
+            # 执行迁移
+            logger.info("开始执行 MongoDB 迁移操作...")
+            exit_code = migration_manager.run_migration()
+
+            if exit_code != 0:
+                logger.warning("⚠️ MongoDB 迁移进程返回非零退出码: %s", exit_code)
+            else:
+                logger.info("✅ MongoDB 数据库迁移完成")
+
+            return exit_code
+
+        except Exception as e:
+            logger.error("❌ MongoDB 迁移过程中出错: %s", str(e))
+            return 1

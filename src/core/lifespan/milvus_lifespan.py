@@ -19,7 +19,7 @@ logger = get_logger(__name__)
 class MilvusLifespanProvider(LifespanProvider):
     """Milvus 生命周期提供者"""
 
-    def __init__(self, name: str = "milvus", order: int = 15):
+    def __init__(self, name: str = "milvus", order: int = 20):
         """
         初始化 Milvus 生命周期提供者
 

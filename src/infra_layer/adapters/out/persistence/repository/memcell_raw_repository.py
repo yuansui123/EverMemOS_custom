@@ -10,7 +10,7 @@ from typing import List, Optional, Dict, Any, Type
 from bson import ObjectId
 from pydantic import BaseModel
 from beanie.operators import And, GTE, LT, Eq, RegEx, Or
-from motor.motor_asyncio import AsyncIOMotorClientSession
+from pymongo.asynchronous.client_session import AsyncClientSession
 from core.observation.logger import get_logger
 from core.di.decorators import repository
 from core.oxm.mongo.base_repository import BaseRepository
@@ -124,7 +124,7 @@ class MemCellRawRepository(BaseRepository[MemCell]):
             return {}
 
     async def append_memcell(
-        self, memcell: MemCell, session: Optional[AsyncIOMotorClientSession] = None
+        self, memcell: MemCell, session: Optional[AsyncClientSession] = None
     ) -> Optional[MemCell]:
         """
         追加 MemCell
@@ -141,7 +141,7 @@ class MemCellRawRepository(BaseRepository[MemCell]):
         self,
         event_id: str,
         update_data: Dict[str, Any],
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> Optional[MemCell]:
         """
         根据 event_id 更新 MemCell
@@ -169,7 +169,7 @@ class MemCellRawRepository(BaseRepository[MemCell]):
             raise e
 
     async def delete_by_event_id(
-        self, event_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, event_id: str, session: Optional[AsyncClientSession] = None
     ) -> bool:
         """
         根据 event_id 删除 MemCell
@@ -484,7 +484,7 @@ class MemCellRawRepository(BaseRepository[MemCell]):
     # ==================== 批量操作 ====================
 
     async def delete_by_user_id(
-        self, user_id: str, session: Optional[AsyncIOMotorClientSession] = None
+        self, user_id: str, session: Optional[AsyncClientSession] = None
     ) -> int:
         """
         删除用户的所有 MemCell
@@ -512,7 +512,7 @@ class MemCellRawRepository(BaseRepository[MemCell]):
         start_time: datetime,
         end_time: datetime,
         user_id: Optional[str] = None,
-        session: Optional[AsyncIOMotorClientSession] = None,
+        session: Optional[AsyncClientSession] = None,
     ) -> int:
         """
         删除时间范围内的 MemCell

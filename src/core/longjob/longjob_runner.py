@@ -4,12 +4,11 @@ LongJob 运行器 - 用于启动和管理长任务
 提供了运行单个长任务的功能，包括：
 - 通过 DI 查找指定的长任务
 - 优雅启动和关闭
-- 信号处理
+- 基于 asyncio task cancel 机制处理关闭
 - 错误处理和日志记录
 """
 
 import asyncio
-import signal
 from typing import Optional
 
 from core.di.utils import get_bean
@@ -23,25 +22,15 @@ async def run_longjob_mode(longjob_name: str):
     """
     运行指定的长任务模式
 
+    该函数会作为 asyncio Task 运行，通过 task.cancel() 来触发关闭。
+    当收到 CancelledError 时，会优雅地关闭长任务。
+
     Args:
         longjob_name: 长任务名称
     """
     logger.info("🚀 启动 LongJob 模式: %s", longjob_name)
 
     longjob_instance: Optional[LongJobInterface] = None
-
-    # 异步启动应用生命周期
-    try:
-        from app import app
-
-        if hasattr(app, "start_lifespan"):
-            await app.start_lifespan()
-            logger.info("✅ 应用lifespan启动完成")
-        else:
-            logger.warning("⚠️ app实例没有start_lifespan方法")
-    except Exception as e:
-        logger.warning(f"⚠️ 启动应用lifespan时出错: {e}")
-        # 不抛出异常，继续执行
 
     try:
         # 尝试从 DI 容器中获取指定的长任务
@@ -61,44 +50,36 @@ async def run_longjob_mode(longjob_name: str):
             logger.info("💡 长任务必须继承 LongJobInterface 或其子类")
             return
 
-        # 设置信号处理器用于优雅关闭
-        shutdown_event = asyncio.Event()
-
-        def signal_handler(signum, _):
-            logger.info("🛑 收到停止信号 (%s)，开始优雅关闭...", signum)
-            shutdown_event.set()
-
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-
         # 启动长任务
         logger.info("🔄 启动长任务: %s", longjob_name)
         await longjob_instance.start()
 
         logger.info("✅ 长任务 '%s' 已启动，正在运行...", longjob_name)
-        logger.info("💡 按 Ctrl+C 停止任务")
 
-        # 等待关闭信号
-        await shutdown_event.wait()
+        # 无限等待，直到 task 被 cancel
+        # 使用一个永不完成的 Future 来保持任务运行
+        await asyncio.Event().wait()
 
-        # 优雅关闭
-        logger.info("🔄 正在关闭长任务: %s", longjob_name)
-        await longjob_instance.shutdown()
-
-        logger.info("✅ 长任务 '%s' 已成功关闭", longjob_name)
-
-    except KeyboardInterrupt:
-        logger.info("🛑 收到键盘中断，开始关闭...")
+    except asyncio.CancelledError:
+        # 收到 task cancel 信号，开始优雅关闭
+        logger.info("🛑 收到取消信号，开始优雅关闭长任务: %s", longjob_name)
         if longjob_instance:
             try:
                 await longjob_instance.shutdown()
-                logger.info("✅ 长任务已关闭")
+                logger.info("✅ 长任务 '%s' 已成功关闭", longjob_name)
             except Exception as e:
-                logger.error("❌ 关闭长任务时出错: %s", str(e))
+                logger.error("❌ 关闭长任务时出错: %s", str(e), exc_info=True)
+        # 重新抛出 CancelledError，让调用方知道任务已被取消
+        raise
+
     except Exception as e:
+        # 运行过程中发生异常
         logger.error("❌ 运行长任务时出错: %s", str(e), exc_info=True)
         if longjob_instance:
             try:
                 await longjob_instance.shutdown()
+                logger.info("✅ 长任务已在异常后关闭")
             except Exception as shutdown_error:
-                logger.error("❌ 关闭长任务时出错: %s", str(shutdown_error))
+                logger.error(
+                    "❌ 关闭长任务时出错: %s", str(shutdown_error), exc_info=True
+                )

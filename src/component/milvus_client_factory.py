@@ -47,7 +47,7 @@ def get_milvus_config(prefix: str = "") -> dict:
     port = int(_env("MILVUS_PORT", "19530"))
 
     config = {
-        "uri": f"http://{host}:{port}",
+        "uri": f"{host}:{port}" if host.startswith("http") else f"http://{host}:{port}",
         "user": _env("MILVUS_USER"),
         "password": _env("MILVUS_PASSWORD"),
         "db_name": _env("MILVUS_DB_NAME"),

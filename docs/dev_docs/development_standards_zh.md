@@ -410,7 +410,7 @@ def fetch_user_data(user_id: str) -> dict:
 
 ```python
 # ✅ 正确：使用异步数据库驱动
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 async def get_user(db, user_id: str):
     return await db.users.find_one({"_id": user_id})
@@ -919,14 +919,14 @@ class MemoryRepository(ABC):
 
 ```python
 # infra_layer/adapters/out/persistence/repository/memory_mongo_repository.py
-from motor.motor_asyncio import AsyncIOMotorDatabase
+from pymongo.asynchronous.database import AsyncDatabase
 from core.ports.memory_repository import MemoryRepository
 from core.domain.memory import Memory
 
 class MemoryMongoRepository(MemoryRepository):
     """MongoDB 记忆仓储实现"""
     
-    def __init__(self, db: AsyncIOMotorDatabase):
+    def __init__(self, db: AsyncDatabase):
         self._collection = db["memories"]
     
     async def save(self, memory: Memory) -> str:
@@ -986,12 +986,12 @@ class MemoryService:
 
 ```python
 # ❌ 错误：在业务层直接使用 MongoDB 驱动
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 class MemoryService:
     def __init__(self, db_uri: str):
         # ❌ 业务层不应该直接连接数据库
-        self._client = AsyncIOMotorClient(db_uri)
+        self._client = AsyncMongoClient(db_uri)
         self._db = self._client["memsys"]
     
     async def create_memory(self, user_id: str, content: str) -> str:
@@ -1023,10 +1023,10 @@ class MemoryRetriever:
 ```python
 # ❌ 错误：在 API 层直接访问数据库
 from fastapi import APIRouter
-from motor.motor_asyncio import AsyncIOMotorClient
+from pymongo import AsyncMongoClient
 
 router = APIRouter()
-db_client = AsyncIOMotorClient("mongodb://localhost")
+db_client = AsyncMongoClient("mongodb://localhost")
 
 @router.get("/memories/{user_id}")
 async def get_memories(user_id: str):
@@ -1054,7 +1054,7 @@ class Container(containers.DeclarativeContainer):
     
     # 数据库连接
     mongodb_client = providers.Singleton(
-        AsyncIOMotorClient,
+        AsyncMongoClient,
         config.mongodb.uri
     )
     
