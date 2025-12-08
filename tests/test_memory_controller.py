@@ -45,6 +45,7 @@ class MemoryControllerTester:
     # 默认租户信息
     DEFAULT_ORGANIZATION_ID = "test_memory_api_organization"
     DEFAULT_SPACE_ID = "test_memory_api_space"
+    DEFAULT_API_KEY = "test_memory_api_key"
 
     def __init__(
         self,
@@ -53,6 +54,7 @@ class MemoryControllerTester:
         group_id: str,
         organization_id: str = None,
         space_id: str = None,
+        api_key: str = None,
         timeout: int = 180,
         sync_mode: bool = True,
     ):
@@ -65,6 +67,7 @@ class MemoryControllerTester:
             group_id: 测试群组ID
             organization_id: 组织ID（默认: test_memory_api_organization）
             space_id: 空间ID（默认: test_memory_api_space）
+            api_key: API密钥（默认: test_memory_api_key）
             timeout: 请求超时时间(秒)，默认180秒(3分钟)
             sync_mode: 是否启用同步模式（默认: True，关闭后台模式以保证时序测试效果）
         """
@@ -74,6 +77,7 @@ class MemoryControllerTester:
         self.group_id = group_id
         self.organization_id = organization_id or self.DEFAULT_ORGANIZATION_ID
         self.space_id = space_id or self.DEFAULT_SPACE_ID
+        self.api_key = api_key or self.DEFAULT_API_KEY
         self.timeout = timeout
         self.sync_mode = sync_mode
 
@@ -82,9 +86,15 @@ class MemoryControllerTester:
         获取租户相关的请求头
 
         Returns:
-            dict: 包含 X-Organization-Id 和 X-Space-Id 的字典
+            dict: 包含 X-Organization-Id、X-Space-Id 和可选的 X-API-Key 的字典
         """
-        return {"X-Organization-Id": self.organization_id, "X-Space-Id": self.space_id}
+        headers = {
+            "X-Organization-Id": self.organization_id,
+            "X-Space-Id": self.space_id,
+        }
+        if self.api_key:
+            headers["X-API-Key"] = self.api_key
+        return headers
 
     def init_database(self) -> bool:
         """
@@ -919,6 +929,7 @@ class MemoryControllerTester:
         print(f"  测试群组: {self.group_id}")
         print(f"  组织ID: {self.organization_id}")
         print(f"  空间ID: {self.space_id}")
+        print(f"  API Key: {self.api_key}")
         print(f"  同步模式: {self.sync_mode}")
         print(f"  测试方法: {test_method}")
         if except_test_methods:
@@ -1032,8 +1043,11 @@ def parse_args():
   # 关闭同步模式（使用后台模式）
   python tests/test_memory_controller.py --sync-mode false
 
+  # 指定 API Key 进行认证
+  python tests/test_memory_controller.py --api-key your_api_key_here
+
   # 指定所有参数
-  python tests/test_memory_controller.py --base-url http://dev-server:1995 --user-id test_user --group-id test_group --organization-id my_org --space-id my_space --timeout 60 --sync-mode true
+  python tests/test_memory_controller.py --base-url http://dev-server:1995 --user-id test_user --group-id test_group --organization-id my_org --space-id my_space --api-key your_api_key --timeout 60 --sync-mode true
         """,
     )
 
@@ -1057,6 +1071,12 @@ def parse_args():
         "--space-id",
         default=None,
         help=f"空间ID (默认: {MemoryControllerTester.DEFAULT_SPACE_ID})",
+    )
+
+    parser.add_argument(
+        "--api-key",
+        default=None,
+        help=f"API密钥，用于认证 (默认: {MemoryControllerTester.DEFAULT_API_KEY})",
     )
 
     parser.add_argument(
@@ -1133,6 +1153,10 @@ def main():
         print(
             f"⚠️  未提供 --space-id，使用默认值: {MemoryControllerTester.DEFAULT_SPACE_ID}"
         )
+    if not args.api_key:
+        print(
+            f"⚠️  未提供 --api-key，使用默认值: {MemoryControllerTester.DEFAULT_API_KEY}"
+        )
 
     # 创建测试器实例
     tester = MemoryControllerTester(
@@ -1141,6 +1165,7 @@ def main():
         group_id=group_id,
         organization_id=organization_id,
         space_id=space_id,
+        api_key=args.api_key,
         timeout=args.timeout,
         sync_mode=args.sync_mode,
     )
