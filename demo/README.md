@@ -102,7 +102,7 @@ Batch process conversation data and extract memories via HTTP API.
 **Workflow**:
 - Clears all existing memories (ensures clean starting state)
 - Loads conversation files from `data/` directory (e.g., `data/assistant_chat_zh.json`)
-- Sends each message to the API server (`/api/v3/agentic/memorize`)
+- Sends each message to the API server (`/api/v1/memories`)
 - Server-side automatically extracts MemCells, generates episodes and profiles
 - All data is stored in databases (MongoDB, Elasticsearch, Milvus)
 
@@ -269,7 +269,7 @@ MONGODB_URI=mongodb://admin:memsys123@localhost:27017
 ## 🔗 Related Documentation
 
 - [Group Chat Format Specification](../data_format/group_chat/group_chat_format.md)
-- [API Documentation](../docs/api_docs/agentic_v3_api.md)
+- [API Documentation](../docs/api_docs/memory_api.md)
 - [Data Documentation](../data/README.md)
 - [Internationalization Guide](../docs/dev_docs/chat_i18n_usage.md)
 
@@ -318,7 +318,7 @@ MONGODB_URI=mongodb://admin:memsys123@localhost:27017
 ## 🔗 Related Documentation
 
 - 📋 [Group Chat Format Specification](../data_format/group_chat/group_chat_format.md) - Data file format
-- 🔌 [API Documentation](../docs/api_docs/agentic_v3_api.md) - API reference
+- 🔌 [API Documentation](../docs/api_docs/memory_api.md) - API reference
 - 📦 [Data Documentation](../data/README.md) - Sample data details
 - 🏠 [Project Home](../README.md) - Project overview and architecture
 - 📘 [Batch Memorization Guide](../docs/dev_docs/run_memorize_usage.md) - Advanced usage

@@ -2,7 +2,7 @@
 
 ## 概述
 
-本文档说明如何测试 V3 API 的 Agentic 检索功能。Agentic 检索是一种 LLM 引导的智能多轮检索方法,能够自动判断检索结果的充分性并进行多轮优化。
+本文档说明如何测试 V1 API 的 Agentic 检索功能。Agentic 检索是一种 LLM 引导的智能多轮检索方法,能够自动判断检索结果的充分性并进行多轮优化。
 
 ## 功能特性
 
@@ -19,7 +19,7 @@
 ### API 端点
 
 ```
-POST /api/v3/agentic/retrieve_agentic
+POST /api/v1/memories/search
 ```
 
 ### 请求格式
@@ -155,7 +155,7 @@ uv run python src/bootstrap.py demo/test_v3_retrieve_http.py
 
 ## 参考资料
 
-- [Agentic V3 API 文档](../api_docs/agentic_v3_api.md)
+- [Memory API 文档](../api_docs/memory_api.md)
 - [Agentic 检索原理](./agentic_retrieval_guide.md)
 - [Memory Manager 使用指南](./api_usage_guide.md)
 

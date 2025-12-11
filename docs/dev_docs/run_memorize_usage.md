@@ -296,5 +296,5 @@ A: Check the following:
 ## References
 
 - [GroupChatFormat Format Definition](../../data_format/group_chat/group_chat_format.py)
-- [Agentic V3 API Documentation](../api_docs/agentic_v3_api.md)
+- [Memory API Documentation](../api_docs/memory_api.md)
 - [Bootstrap Usage Documentation](./bootstrap_usage.md)

@@ -6,7 +6,7 @@
 
 - [API 概览](#api-概览)
 - [存储记忆接口](#存储记忆接口)
-  - [V3 Agentic API](#v3-agentic-api)
+  - [V1 Memory API](#v3-agentic-api)
   - [V1 Memory API](#v1-memory-api)
   - [接口选择建议](#接口选择建议)
 - [群聊数据格式](#群聊数据格式)
@@ -21,12 +21,12 @@ MemSys 提供两套标准化的 API 接口用于存储记忆：
 
 | API 类型 | 接口地址 | 功能 | 推荐场景 |
 |---------|---------|------|---------|
-| **V3 Agentic API** | `/api/v3/agentic/memorize` | 存储记忆 + 智能检索 | 需要检索功能的完整应用场景 |
-| **V1 Memory API** | `/api/v1/memories` | 纯存储记忆 | 仅需存储功能的简单场景 |
+| **V1 Memory API** | `/api/v1/memories` | 存储记忆 + 智能检索 | 需要检索功能的完整应用场景 |
+
 
 ### 接口对比
 
-| 特性 | V3 Agentic API | V1 Memory API |
+| 特性 | V1 Memory API | V1 Memory API |
 |-----|---------------|--------------|
 | 存储单条消息 | ✅ 支持 | ✅ 支持 |
 | 消息格式 | 简单直接的单条消息格式 | 简单直接的单条消息格式 |
@@ -34,20 +34,20 @@ MemSys 提供两套标准化的 API 接口用于存储记忆：
 | 会话元数据管理 | ✅ 支持 | ✅ 支持（含 PATCH 更新） |
 | 适用场景 | 完整的记忆系统（存储+检索） | 纯记忆存储系统 |
 
-**重要提示**：两个接口的存储格式完全相同，可以根据您的需求选择使用。如果您需要检索功能，建议使用 V3 Agentic API 以获得完整的功能支持。
+**重要提示**：两个接口的存储格式完全相同，可以根据您的需求选择使用。如果您需要检索功能，建议使用 V1 Memory API 以获得完整的功能支持。
 
 ---
 
 ## 🚀 存储记忆接口
 
-### V3 Agentic API
+### V1 Memory API
 
 推荐用于需要完整功能（存储 + 检索）的场景。
 
 #### 接口地址
 
 ```
-POST /api/v3/agentic/memorize
+POST /api/v1/memories
 ```
 
 #### 特性
@@ -57,7 +57,7 @@ POST /api/v3/agentic/memorize
 - ✅ 支持 Agentic 智能检索（LLM 辅助）
 - ✅ 支持会话元数据管理
 
-详细文档请参考：[Agentic V3 API 文档](../api_docs/agentic_v3_api.md)
+详细文档请参考：[Memory API 文档](../api_docs/memory_api.md)
 
 ---
 
@@ -83,7 +83,7 @@ POST /api/v1/memories
 
 ### 接口选择建议
 
-**使用 V3 Agentic API (`/api/v3/agentic/memorize`)** 如果：
+**使用 V1 Memory API (`/api/v1/memories`)** 如果：
 - ✅ 您需要使用智能检索功能
 - ✅ 您需要构建完整的记忆系统（存储 + 检索）
 - ✅ 您希望使用轻量级或 Agentic 检索模式
@@ -93,7 +93,7 @@ POST /api/v1/memories
 - ✅ 您有自己的检索方案
 - ✅ 您希望使用更简洁的专用存储接口
 
-**注意**：两个接口的数据格式完全相同，底层存储机制也相同，主要区别在于 V3 API 提供了额外的检索功能。
+**注意**：两个接口的数据格式完全相同，底层存储机制也相同，主要区别在于 V1 API 提供了额外的检索功能。
 
 ---
 
@@ -150,27 +150,7 @@ POST /api/v1/memories
 
 ### 调用示例
 
-以下示例展示如何调用两个接口。两个接口的请求格式相同，只需更改 URL 即可。
-
 #### cURL
-
-**使用 V3 Agentic API：**
-
-```bash
-curl -X POST http://localhost:1995/api/v3/agentic/memorize \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message_id": "msg_001",
-    "create_time": "2025-02-01T10:00:00+08:00",
-    "sender": "user_103",
-    "sender_name": "Chen",
-    "content": "我们需要在本周完成产品设计",
-    "group_id": "group_001",
-    "group_name": "项目讨论组"
-  }'
-```
-
-**使用 V1 Memory API：**
 
 ```bash
 curl -X POST http://localhost:1995/api/v1/memories \
@@ -188,38 +168,11 @@ curl -X POST http://localhost:1995/api/v1/memories \
 
 #### Python
 
-**使用 V3 Agentic API：**
-
 ```python
 import httpx
 import asyncio
 
-async def store_memory_v3():
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "http://localhost:1995/api/v3/agentic/memorize",
-            json={
-                "message_id": "msg_001",
-                "create_time": "2025-02-01T10:00:00+08:00",
-                "sender": "user_103",
-                "sender_name": "Chen",
-                "content": "我们需要在本周完成产品设计",
-                "group_id": "group_001",
-                "group_name": "项目讨论组"
-            }
-        )
-        print(response.json())
-
-asyncio.run(store_memory_v3())
-```
-
-**使用 V1 Memory API：**
-
-```python
-import httpx
-import asyncio
-
-async def store_memory_v1():
+async def store_memory():
     async with httpx.AsyncClient() as client:
         response = await client.post(
             "http://localhost:1995/api/v1/memories",
@@ -235,32 +188,11 @@ async def store_memory_v1():
         )
         print(response.json())
 
-asyncio.run(store_memory_v1())
+asyncio.run(store_memory())
 ```
 
 #### JavaScript
 
-**使用 V3 Agentic API：**
-
-```javascript
-fetch('http://localhost:1995/api/v3/agentic/memorize', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json'
-  },
-  body: JSON.stringify({
-    message_id: 'msg_001',
-    create_time: '2025-02-01T10:00:00+08:00',
-    sender: 'user_103',
-    sender_name: 'Chen',
-    content: '我们需要在本周完成产品设计',
-    group_id: 'group_001',
-    group_name: '项目讨论组'
-  })
-})
-.then(response => response.json())
-.then(data => console.log(data));
-```
 
 **使用 V1 Memory API：**
 
@@ -353,15 +285,9 @@ src/run_memorize.py
 
 ### 基本用法
 
-使用 Bootstrap 脚本运行，可以选择使用 V3 或 V1 API：
+使用 Bootstrap 脚本运行 V1 API：
 
-**使用 V3 Agentic API（推荐，支持检索）：**
 
-```bash
-uv run python src/bootstrap.py src/run_memorize.py \
-  --input data/group_chat.json \
-  --api-url http://localhost:1995/api/v3/agentic/memorize
-```
 
 **使用 V1 Memory API（仅存储）：**
 
@@ -382,25 +308,6 @@ uv run python src/bootstrap.py src/run_memorize.py \
 ### 使用示例
 
 #### 1. 存储记忆
-
-**使用 V3 Agentic API：**
-
-```bash
-# 基本用法
-uv run python src/bootstrap.py src/run_memorize.py \
-  --input data/group_chat.json \
-  --api-url http://localhost:1995/api/v3/agentic/memorize
-
-# 使用相对路径
-uv run python src/bootstrap.py src/run_memorize.py \
-  --input ../my_data/chat_history.json \
-  --api-url http://localhost:1995/api/v3/agentic/memorize
-
-# 指定远程服务器
-uv run python src/bootstrap.py src/run_memorize.py \
-  --input data/group_chat.json \
-  --api-url http://api.example.com/api/v3/agentic/memorize
-```
 
 **使用 V1 Memory API：**
 
@@ -450,7 +357,7 @@ uv run python src/bootstrap.py src/run_memorize.py \
 ======================================================================
 📄 输入文件: /path/to/data/group_chat.json
 🔍 验证模式: 否
-🌐 API地址: http://localhost:1995/api/v3/agentic/memorize
+🌐 API地址: http://localhost:1995/api/v1/memories
 ======================================================================
 
 ======================================================================
@@ -474,7 +381,7 @@ uv run python src/bootstrap.py src/run_memorize.py \
 群组名称: 项目讨论组
 群组ID: group_001
 消息数量: 20
-API地址: http://localhost:1995/api/v3/agentic/memorize
+API地址: http://localhost:1995/api/v1/memories
 
 --- 处理第 1/20 条消息 ---
   ✓ 成功保存 2 条记忆
@@ -564,13 +471,7 @@ uv run python src/run.py
 
 #### 4. 存储记忆
 
-**选择 A：使用 V3 Agentic API（推荐）**
 
-```bash
-uv run python src/bootstrap.py src/run_memorize.py \
-  --input my_chat_data.json \
-  --api-url http://localhost:1995/api/v3/agentic/memorize
-```
 
 **选择 B：使用 V1 Memory API**
 
@@ -582,7 +483,7 @@ uv run python src/bootstrap.py src/run_memorize.py \
 
 #### 5. 验证存储结果
 
-如果使用 V3 Agentic API，可以通过检索接口查询已存储的记忆（具体查询 API 请参考 [Agentic V3 API 文档](../api_docs/agentic_v3_api.md)）。
+如果使用 V1 Memory API，可以通过检索接口查询已存储的记忆（具体查询 API 请参考 [Memory API 文档](../api_docs/memory_api.md)）。
 
 ### 错误处理
 
@@ -625,7 +526,7 @@ uv run python src/bootstrap.py src/run_memorize.py \
 
 ### API 文档
 
-- [Agentic V3 API 文档](../api_docs/agentic_v3_api.md) - V3 API 完整文档（存储 + 检索）
+- [Memory API 文档](../api_docs/memory_api.md) - V1 API 完整文档（存储 + 检索）
 - [Memory API 文档](../api_docs/memory_api.md) - V1 Memory API 完整文档（专注存储）
 
 ### 其他文档
@@ -636,28 +537,22 @@ uv run python src/bootstrap.py src/run_memorize.py \
 
 ## 💡 最佳实践
 
-1. **API 选择**
-   - 如果需要智能检索功能 → 使用 V3 Agentic API
-   - 如果仅需存储记忆 → 使用 V1 Memory API
-   - 如果不确定 → 推荐使用 V3 Agentic API（功能更完整）
-   - 两个 API 底层存储相同，可以随时切换
-
-2. **数据准备**
+1. **数据准备**
    - 使用标准的 GroupChatFormat 格式
    - 确保时间戳包含时区信息
    - 为用户提供完整的详细信息
 
-3. **批量处理**
+2. **批量处理**
    - 对于大量消息，使用脚本逐条处理
    - 添加适当的延迟避免服务器压力
    - 监控处理进度和错误
 
-4. **错误恢复**
+3. **错误恢复**
    - 记录处理失败的消息
    - 支持断点续传
    - 定期验证存储结果
 
-5. **性能优化**
+4. **性能优化**
    - 合理设置并发数量
    - 使用批量接口（如适用）
    - 监控 API 响应时间

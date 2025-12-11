@@ -296,6 +296,6 @@ A: 检查以下几点：
 ## 参考资料
 
 - [GroupChatFormat 格式定义](../../data_format/group_chat/group_chat_format.py)
-- [Agentic V3 API 文档](../api_docs/agentic_v3_api_zh.md)
+- [Memory API 文档](../api_docs/memory_api.md)
 - [Bootstrap 使用文档](./bootstrap_usage.md)
 

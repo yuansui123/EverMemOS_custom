@@ -43,12 +43,12 @@ class RetrievalTester:
             base_url: API server address
         """
         self.base_url = base_url
-        self.retrieve_url = f"{base_url}/api/v3/agentic/retrieve_lightweight"
+        self.retrieve_url = f"{base_url}/api/v1/memories/search"
         
         # Test Configuration
         self.data_sources = ["episode", "event_log", "foresight", "profile"]
         self.memory_scopes = ["personal", "group"]
-        self.retrieval_modes = ["embedding", "bm25", "rrf"]
+        self.retrieval_modes = ["keyword", "vector", "hybrid", "rrf", "agentic"]
         
         # Test Results Statistics
         self.total_tests = 0
@@ -96,13 +96,19 @@ class RetrievalTester:
         request_start_time = time.time()
         
         # Build request payload
+        # Map data_source to memory_types API format
+        memory_type_map = {
+            "episode": "episodic_memory",
+            "event_log": "event_log",
+            "foresight": "foresight",
+        }
         payload = {
             "query": query,
             "user_id": user_id,
             "group_id": group_id,
             "top_k": top_k,
-            "data_source": data_source,
-            "retrieval_mode": retrieval_mode,
+            "memory_types": memory_type_map.get(data_source, data_source),
+            "retrieve_method": retrieval_mode,
         }
         
         # Add optional parameters
@@ -113,7 +119,7 @@ class RetrievalTester:
         
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(self.retrieve_url, json=payload)
+                response = await client.get(self.retrieve_url, params=payload)
                 response.raise_for_status()
                 result = response.json()
                 
@@ -561,7 +567,7 @@ async def demo_foresight_evidence():
     print("="*80)
     
     base_url = "http://localhost:8001"
-    retrieve_url = f"{base_url}/api/v3/agentic/retrieve_lightweight"
+    retrieve_url = f"{base_url}/api/v1/memories/search"
     
     print("\n📖 Scenario Description:")
     print("   User removed wisdom tooth → System generates foresight: 'Prefer soft food'")
@@ -572,8 +578,8 @@ async def demo_foresight_evidence():
     payload = {
         "query": test_query,
         "user_id": "robot_001",  # Use actual user_id in DB
-        "data_source": "foresight",
-        "retrieval_mode": "rrf",
+        "memory_types": "foresight",
+        "retrieve_method": "rrf",
         "top_k": 5,
         "current_time": datetime.now().strftime("%Y-%m-%d"),
     }
@@ -584,7 +590,7 @@ async def demo_foresight_evidence():
     
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            response = await client.post(retrieve_url, json=payload)
+            response = await client.get(retrieve_url, params=payload)
             response.raise_for_status()
             result = response.json()
             

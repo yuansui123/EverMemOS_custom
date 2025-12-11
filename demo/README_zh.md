@@ -102,7 +102,7 @@ uv run python src/bootstrap.py demo/simple_demo.py
 **工作流程**：
 - 清空所有已存在的记忆（确保干净的初始状态）
 - 从 `data/` 目录加载对话文件（如 `data/assistant_chat_zh.json`）
-- 逐条发送消息到 API 服务器 (`/api/v3/agentic/memorize`)
+- 逐条发送消息到 API 服务器 (`/api/v1/memories`)
 - 服务器端自动提取 MemCell、生成情节和画像
 - 所有数据存储到数据库（MongoDB、Elasticsearch、Milvus）
 
@@ -272,7 +272,7 @@ MONGODB_URI=mongodb://admin:memsys123@localhost:27017
 ## 🔗 相关文档
 
 - [群聊格式规范](../data_format/group_chat/group_chat_format.md)
-- [API 文档](../docs/api_docs/agentic_v3_api_zh.md)
+- [API 文档](../docs/api_docs/memory_api.md)
 - [数据说明文档](../data/README_zh.md)
 - [国际化使用指南](../docs/dev_docs/chat_i18n_usage.md)
 
@@ -320,7 +320,7 @@ MONGODB_URI=mongodb://admin:memsys123@localhost:27017
 ## 🔗 相关文档
 
 - 📋 [群聊格式规范](../data_format/group_chat/group_chat_format.md) - 数据文件格式说明
-- 🔌 [API 文档](../docs/api_docs/agentic_v3_api_zh.md) - API 接口文档
+- 🔌 [API 文档](../docs/api_docs/memory_api.md) - API 接口文档
 - 📦 [数据说明](../data/README_zh.md) - 示例数据详细说明
 - 🏠 [项目主页](../README_zh.md) - 项目概述和架构
 - 📘 [批量记忆化使用指南](../docs/dev_docs/run_memorize_usage.md) - 高级用法

@@ -57,7 +57,10 @@ from infra_layer.adapters.out.search.repository.event_log_milvus_repository impo
 from .vectorize_service import get_vectorize_service
 from .rerank_service import get_rerank_service
 from api_specs.memory_models import MemoryType, RetrieveMethod
-
+import os
+from memory_layer.llm.llm_provider import LLMProvider
+from agentic_layer.agentic_utils import AgenticConfig, check_sufficiency, generate_multi_queries
+from agentic_layer.retrieval_utils import reciprocal_rank_fusion
 logger = logging.getLogger(__name__)
 
 
@@ -174,17 +177,19 @@ class MemoryManager:
             )
 
             # Dispatch based on retrieval method
-            if retrieve_method == RetrieveMethod.KEYWORD:
-                # Keyword retrieval
-                return await self.retrieve_mem_keyword(retrieve_mem_request)
-            elif retrieve_method == RetrieveMethod.VECTOR:
-                # Vector retrieval
-                return await self.retrieve_mem_vector(retrieve_mem_request)
-            elif retrieve_method == RetrieveMethod.HYBRID:
-                # Hybrid retrieval
-                return await self.retrieve_mem_hybrid(retrieve_mem_request)
-            else:
-                raise ValueError(f"Unsupported retrieval method: {retrieve_method}")
+            match retrieve_method:
+                case RetrieveMethod.KEYWORD:
+                    return await self.retrieve_mem_keyword(retrieve_mem_request)
+                case RetrieveMethod.VECTOR:
+                    return await self.retrieve_mem_vector(retrieve_mem_request)
+                case RetrieveMethod.HYBRID:
+                    return await self.retrieve_mem_hybrid(retrieve_mem_request)
+                case RetrieveMethod.RRF:
+                    return await self.retrieve_mem_rrf(retrieve_mem_request)
+                case RetrieveMethod.AGENTIC:
+                    return await self.retrieve_mem_agentic(retrieve_mem_request)
+                case _:
+                    raise ValueError(f"Unsupported retrieval method: {retrieve_method}")
 
         except Exception as e:
             logger.error(f"Error in retrieve_mem: {e}", exc_info=True)
@@ -216,98 +221,13 @@ class MemoryManager:
     async def retrieve_mem_keyword(
         self, retrieve_mem_request: 'RetrieveMemRequest'
     ) -> RetrieveMemResponse:
-        """Keyword-based memory retrieval (original retrieve_mem implementation)
-
-        Args:
-            retrieve_mem_request: RetrieveMemRequest containing retrieval parameters
-
-        Returns:
-            RetrieveMemResponse containing retrieval results
-        """
+        """Keyword-based memory retrieval"""
         try:
-            # Get parameters from Request
-            if not retrieve_mem_request:
-                raise ValueError(
-                    "retrieve_mem_request is required for retrieve_mem_keyword"
-                )
-
-            search_results = await self.get_keyword_search_results(retrieve_mem_request)
-
-            if not search_results:
-                logger.warning(
-                    f"No results found in keyword search: user_id={retrieve_mem_request.user_id}, query={retrieve_mem_request.query}"
-                )
-                return RetrieveMemResponse(
-                    memories=[],
-                    original_data=[],
-                    scores=[],
-                    importance_scores=[],
-                    total_count=0,
-                    has_more=False,
-                    query_metadata=Metadata(
-                        source="episodic_memory_es_repository",
-                        user_id=retrieve_mem_request.user_id,
-                        memory_type="retrieve_keyword",
-                    ),
-                    metadata=Metadata(
-                        source="episodic_memory_es_repository",
-                        user_id=retrieve_mem_request.user_id,
-                        memory_type="retrieve_keyword",
-                    ),
-                )
-
-            # Use generic grouping processing strategy
-            memories, scores, importance_scores, original_data, total_count = (
-                await self.group_by_groupid_stratagy(search_results, source_type=RetrieveMethod.KEYWORD.value)
-            )
-
-            logger.debug(
-                f"EpisodicMemoryEsRepository multi_search returned {len(memories)} groups for query: {retrieve_mem_request.query}"
-            )
-
-            return RetrieveMemResponse(
-                memories=memories,
-                scores=scores,
-                importance_scores=importance_scores,
-                original_data=original_data,
-                total_count=total_count,
-                has_more=False,
-                query_metadata=Metadata(
-                    source="episodic_memory_es_repository",
-                    user_id=retrieve_mem_request.user_id,
-                    memory_type="retrieve_keyword",
-                ),
-                metadata=Metadata(
-                    source="episodic_memory_es_repository",
-                    user_id=retrieve_mem_request.user_id,
-                    memory_type="retrieve_keyword",
-                ),
-            )
-
+            hits = await self.get_keyword_search_results(retrieve_mem_request)
+            return await self._to_response(hits, retrieve_mem_request)
         except Exception as e:
             logger.error(f"Error in retrieve_mem_keyword: {e}", exc_info=True)
-            return RetrieveMemResponse(
-                memories=[],
-                original_data=[],
-                scores=[],
-                importance_scores=[],
-                total_count=0,
-                has_more=False,
-                query_metadata=Metadata(
-                    source="retrieve_mem_keyword_service",
-                    user_id=(
-                        retrieve_mem_request.user_id if retrieve_mem_request else ""
-                    ),
-                    memory_type="retrieve_keyword",
-                ),
-                metadata=Metadata(
-                    source="retrieve_mem_keyword_service",
-                    user_id=(
-                        retrieve_mem_request.user_id if retrieve_mem_request else ""
-                    ),
-                    memory_type="retrieve_keyword",
-                ),
-            )
+            return await self._to_response([], retrieve_mem_request)
 
     async def get_keyword_search_results(
         self, retrieve_mem_request: 'RetrieveMemRequest'
@@ -343,8 +263,7 @@ class MemoryManager:
             if end_time is not None:
                 date_range["lte"] = end_time
 
-            # Take the first memory_type, default episodic_memory
-            mem_type = memory_types[0] if memory_types else MemoryType.EPISODIC_MEMORY
+            mem_type = memory_types[0]
             
             repo_class = ES_REPO_MAP.get(mem_type)
             if not repo_class:
@@ -381,177 +300,13 @@ class MemoryManager:
     async def retrieve_mem_vector(
         self, retrieve_mem_request: 'RetrieveMemRequest'
     ) -> RetrieveMemResponse:
-        """Memory retrieval based on vector similarity
-
-        Args:
-            request: Request containing retrieval parameters, including query and retrieve_mem_request
-
-        Returns:
-            RetrieveMemResponse containing retrieval results
-        """
+        """Vector-based memory retrieval"""
         try:
-            # Get parameters from Request
-            logger.debug(
-                f"retrieve_mem_vector called with retrieve_mem_request: {retrieve_mem_request}"
-            )
-            if not retrieve_mem_request:
-                raise ValueError(
-                    "retrieve_mem_request is required for retrieve_mem_vector"
-                )
-
-            query = retrieve_mem_request.query
-            if not query:
-                raise ValueError("query is required for retrieve_mem_vector")
-
-            user_id = retrieve_mem_request.user_id
-            group_id = retrieve_mem_request.group_id
-            top_k = retrieve_mem_request.top_k
-            start_time = retrieve_mem_request.start_time
-            end_time = retrieve_mem_request.end_time
-
-            logger.debug(
-                f"retrieve_mem_vector called with query: {query}, user_id: {user_id}, group_id: {group_id}, top_k: {top_k}"
-            )
-
-            # Get vectorization service
-            vectorize_service = get_vectorize_service()
-
-            # Convert query text to vector
-            logger.debug(f"Starting to vectorize query text: {query}")
-            query_vector = await vectorize_service.get_embedding(query)
-            query_vector_list = query_vector.tolist()  # Convert to list format
-            logger.debug(
-                f"Query text vectorization completed, vector dimension: {len(query_vector_list)}"
-            )
-
-            # Select Milvus repository based on memory type
-            mem_type = retrieve_mem_request.memory_types[0] if retrieve_mem_request.memory_types else MemoryType.EPISODIC_MEMORY
-            match mem_type:
-                case MemoryType.FORESIGHT:
-                    milvus_repo = get_bean_by_type(ForesightMilvusRepository)
-                case MemoryType.EVENT_LOG:
-                    milvus_repo = get_bean_by_type(EventLogMilvusRepository)
-                case MemoryType.EPISODIC_MEMORY:
-                    milvus_repo = get_bean_by_type(EpisodicMemoryMilvusRepository)
-                case _:
-                    raise ValueError(f"Unsupported memory type: {mem_type}")
-            # Handle time range filter conditions
-            start_time_dt = None
-            end_time_dt = None
-            foresight_start_dt = None
-            foresight_end_dt = None
-            current_time_dt = None
-
-            if start_time is not None:
-                start_time_dt = from_iso_format(start_time) if isinstance(start_time, str) else start_time
-
-            if end_time is not None:
-                if isinstance(end_time, str):
-                    end_time_dt = from_iso_format(end_time)
-                    # If date only format, set to end of day
-                    if len(end_time) == 10:
-                        end_time_dt = end_time_dt.replace(hour=23, minute=59, second=59)
-                else:
-                    end_time_dt = end_time
-
-            # Handle foresight time range (only valid for foresight)
-            if mem_type == MemoryType.FORESIGHT:
-                if retrieve_mem_request.start_time:
-                    foresight_start_dt = from_iso_format(retrieve_mem_request.start_time)
-                if retrieve_mem_request.end_time:
-                    foresight_end_dt = from_iso_format(retrieve_mem_request.end_time)
-                if retrieve_mem_request.current_time:
-                    current_time_dt = datetime.strptime(
-                        retrieve_mem_request.current_time, "%Y-%m-%d"
-                    )
-
-            # Call Milvus vector search (pass different parameters based on memory type)
-            if mem_type == MemoryType.FORESIGHT:
-                # Foresight: supports time range and validity filtering, supports radius parameter
-                search_results = await milvus_repo.vector_search(
-                    query_vector=query_vector_list,
-                    user_id=user_id,
-                    group_id=group_id,
-                    start_time=foresight_start_dt,
-                    end_time=foresight_end_dt,
-                    current_time=current_time_dt,
-                    limit=top_k,
-                    score_threshold=0.0,
-                    radius=retrieve_mem_request.radius,  # Get similarity threshold parameter from request object
-                )
-            else:
-                # Episodic memory and event log: use timestamp filtering, supports radius parameter
-                search_results = await milvus_repo.vector_search(
-                    query_vector=query_vector_list,
-                    user_id=user_id,
-                    group_id=group_id,
-                    start_time=start_time_dt,
-                    end_time=end_time_dt,
-                    limit=top_k,
-                    score_threshold=0.0,
-                    radius=retrieve_mem_request.radius,  # Get similarity threshold parameter from request object
-                )
-
-            logger.debug(f"Milvus vector search returned {len(search_results)} results")
-
-            # Add memory_type, search_source to results (Milvus already has 'score')
-            for r in search_results:
-                r['memory_type'] = mem_type.value
-                r['_search_source'] = RetrieveMethod.VECTOR.value
-                r['id'] = r.get('id', '')  # Ensure id field exists
-                r['score'] = r.get('score')  # Unified score field
-                # Milvus already uses 'score', no need to rename
-
-            # Use generic grouping processing strategy
-            memories, scores, importance_scores, original_data, total_count = (
-                await self.group_by_groupid_stratagy(
-                    search_results, source_type=RetrieveMethod.VECTOR.value
-                )
-            )
-
-            logger.debug(
-                f"EpisodicMemoryMilvusRepository vector_search returned {len(memories)} groups for query: {query}"
-            )
-
-            return RetrieveMemResponse(
-                memories=memories,
-                scores=scores,
-                importance_scores=importance_scores,
-                original_data=original_data,
-                total_count=total_count,
-                has_more=False,
-                query_metadata=Metadata(
-                    source="episodic_memory_milvus_repository",
-                    user_id=user_id,
-                    memory_type="retrieve_vector",
-                ),
-                metadata=Metadata(
-                    source="episodic_memory_milvus_repository",
-                    user_id=user_id,
-                    memory_type="retrieve_vector",
-                ),
-            )
-
+            hits = await self.get_vector_search_results(retrieve_mem_request)
+            return await self._to_response(hits, retrieve_mem_request)
         except Exception as e:
             logger.error(f"Error in retrieve_mem_vector: {e}")
-            return RetrieveMemResponse(
-                memories=[],
-                original_data=[],
-                scores=[],
-                importance_scores=[],
-                total_count=0,
-                has_more=False,
-                query_metadata=Metadata(
-                    source="retrieve_mem_vector_service",
-                    user_id=user_id if 'user_id' in locals() else "",
-                    memory_type="retrieve_vector",
-                ),
-                metadata=Metadata(
-                    source="retrieve_mem_vector_service",
-                    user_id=user_id if 'user_id' in locals() else "",
-                    memory_type="retrieve_vector",
-                ),
-            )
+            return await self._to_response([], retrieve_mem_request)
 
     async def get_vector_search_results(
         self, retrieve_mem_request: 'RetrieveMemRequest'
@@ -670,86 +425,53 @@ class MemoryManager:
     async def retrieve_mem_hybrid(
         self, retrieve_mem_request: 'RetrieveMemRequest'
     ) -> RetrieveMemResponse:
-        """Hybrid memory retrieval based on keywords and vectors
-
-        Args:
-            retrieve_mem_request: RetrieveMemRequest containing retrieval parameters
-
-        Returns:
-            RetrieveMemResponse containing hybrid retrieval results
-        """
+        """Hybrid memory retrieval: keyword + vector + rerank"""
         try:
-            logger.debug(
-                f"retrieve_mem_hybrid called with retrieve_mem_request: {retrieve_mem_request}"
-            )
-            if not retrieve_mem_request:
-                raise ValueError(
-                    "retrieve_mem_request is required for retrieve_mem_hybrid"
-                )
-
-            query = retrieve_mem_request.query
-            if not query:
-                raise ValueError("query is required for retrieve_mem_hybrid")
-
-            user_id = retrieve_mem_request.user_id
-            top_k = retrieve_mem_request.top_k
-            start_time = retrieve_mem_request.start_time
-            end_time = retrieve_mem_request.end_time
-
-            logger.debug(
-                f"retrieve_mem_hybrid called with query: {query}, user_id: {user_id}, top_k: {top_k}"
-            )
-
-            # Create keyword retrieval request
-            keyword_request = RetrieveMemRequest(
-                user_id=user_id,
-                memory_types=retrieve_mem_request.memory_types,
-                top_k=top_k,
-                filters=retrieve_mem_request.filters,
-                include_metadata=retrieve_mem_request.include_metadata,
-                start_time=start_time,
-                end_time=end_time,
-                query=query,
-            )
-
-            # Create vector retrieval request
-            vector_request = RetrieveMemRequest(
-                user_id=user_id,
-                memory_types=retrieve_mem_request.memory_types,
-                top_k=top_k,
-                filters=retrieve_mem_request.filters,
-                include_metadata=retrieve_mem_request.include_metadata,
-                start_time=start_time,
-                end_time=end_time,
-                query=query,
-            )
-
-            # Execute both retrievals in parallel, get raw search results
-            keyword_search_results = await self.get_keyword_search_results(
-                keyword_request
-            )
-            vector_search_results = await self.get_vector_search_results(vector_request)
-
-            logger.debug(
-                f"Keyword retrieval returned {len(keyword_search_results)} raw results"
-            )
-            logger.debug(
-                f"Vector retrieval returned {len(vector_search_results)} raw results"
-            )
-
-            # Merge raw search results and rerank
-            hybrid_result = await self._merge_and_rerank_search_results(
-                keyword_search_results, vector_search_results, top_k, user_id, query
-            )
-
-            logger.debug(
-                f"Hybrid retrieval finally returned {len(hybrid_result.memories)} groups"
-            )
-
-            return hybrid_result
-
+            hits = await self._search_hybrid(retrieve_mem_request)
+            return await self._to_response(hits, retrieve_mem_request)
         except Exception as e:
             logger.error(f"Error in retrieve_mem_hybrid: {e}")
+            return await self._to_response([], retrieve_mem_request)
+
+
+    # ================== Core Internal Methods ==================
+
+    async def _rerank(self, query: str, hits: List[Dict], top_k: int) -> List[Dict]:
+        """Rerank hits using rerank service"""
+        if not hits:
+            return []
+        try:
+            return await get_rerank_service()._rerank_all_hits(query, hits, top_k)
+        except Exception as e:
+            raise e
+
+    async def _search_hybrid(self, request: 'RetrieveMemRequest') -> List[Dict]:
+        """Core hybrid search: keyword + vector + rerank, returns flat list"""
+        kw_results = await self.get_keyword_search_results(request)
+        vec_results = await self.get_vector_search_results(request)
+        # Deduplicate by id
+        seen_ids = {h.get('id') for h in kw_results}
+        merged_results = kw_results + [h for h in vec_results if h.get('id') not in seen_ids]
+        return await self._rerank(request.query, merged_results, request.top_k)
+
+    async def _search_rrf(self, request: 'RetrieveMemRequest') -> List[Dict]:
+        """Core RRF search: keyword + vector + RRF fusion, returns flat list"""
+        
+        kw = await self.get_keyword_search_results(request)
+        vec = await self.get_vector_search_results(request)
+        # RRF fusion
+        kw_tuples = [(h, h.get('score', 0)) for h in kw]
+        vec_tuples = [(h, h.get('score', 0)) for h in vec]
+        fused = reciprocal_rank_fusion(kw_tuples, vec_tuples, k=60)
+        return [dict(doc, score=score) for doc, score in fused[:request.top_k]]
+
+    async def _to_response(self, hits: List[Dict], req: 'RetrieveMemRequest') -> RetrieveMemResponse:
+        """Convert flat hits list to grouped RetrieveMemResponse"""
+        user_id = req.user_id if req else ""
+        source_type = req.retrieve_method.value
+        memory_type = req.memory_types[0].value
+        
+        if not hits:
             return RetrieveMemResponse(
                 memories=[],
                 original_data=[],
@@ -757,87 +479,12 @@ class MemoryManager:
                 importance_scores=[],
                 total_count=0,
                 has_more=False,
-                query_metadata=Metadata(
-                    source="retrieve_mem_hybrid_service",
-                    user_id=user_id if 'user_id' in locals() else "",
-                    memory_type="retrieve_hybrid",
-                ),
-                metadata=Metadata(
-                    source="retrieve_mem_hybrid_service",
-                    user_id=user_id if 'user_id' in locals() else "",
-                    memory_type="retrieve_hybrid",
-                ),
+                query_metadata=Metadata(source=source_type, user_id=user_id or "", memory_type=memory_type),
+                metadata=Metadata(source=source_type, user_id=user_id or "", memory_type=memory_type),
             )
-
-
-    async def _merge_and_rerank_search_results(
-        self,
-        keyword_search_results: List[Dict[str, Any]],
-        vector_search_results: List[Dict[str, Any]],
-        top_k: int,
-        user_id: str,
-        query: str,
-    ) -> RetrieveMemResponse:
-        """Merge raw search results from keyword and vector retrieval, and rerank
-
-        Args:
-            keyword_search_results: Raw search results from keyword retrieval
-            vector_search_results: Raw search results from vector retrieval
-            top_k: Maximum number of groups to return
-            user_id: User ID
-            query: Query text
-
-        Returns:
-            RetrieveMemResponse: Merged and reranked results
-        """
-        # Extract search results
-        keyword_hits = keyword_search_results
-        vector_hits = vector_search_results
-
-        logger.debug(f"Raw keyword retrieval results: {len(keyword_hits)} items")
-        logger.debug(f"Raw vector retrieval results: {len(vector_hits)} items")
-
-        # Merge all search results and mark source
-        all_hits = []
-
-        # Add keyword retrieval results, mark source
-        for hit in keyword_hits:
-            hit_copy = hit.copy()
-            hit_copy['_search_source'] = 'keyword'
-            all_hits.append(hit_copy)
-
-        # Add vector retrieval results, mark source
-        for hit in vector_hits:
-            hit_copy = hit.copy()
-            hit_copy['_search_source'] = 'vector'
-            all_hits.append(hit_copy)
-
-        logger.debug(f"Total results after merging: {len(all_hits)} items")
-
-        # Use rerank service for reordering
-        try:
-            rerank_service = get_rerank_service()
-            reranked_hits = await rerank_service._rerank_all_hits(
-                query, all_hits, top_k
-            )
-
-            logger.debug(
-                f"Number of results after rerank service: {len(reranked_hits)} items"
-            )
-
-        except Exception as e:
-            logger.error(f"Rerank service failed, falling back to simple sorting: {e}")
-            # If rerank fails, fall back to simple score sorting
-            reranked_hits = sorted(
-                all_hits, key=lambda x: x.get('score', 0), reverse=True
-            )[:top_k]
-
-        # Group process reranked results
         memories, scores, importance_scores, original_data, total_count = (
-            await self.group_by_groupid_stratagy(reranked_hits, source_type=RetrieveMethod.HYBRID.value)
+            await self.group_by_groupid_stratagy(hits, source_type=source_type)
         )
-
-        # Build final result
         return RetrieveMemResponse(
             memories=memories,
             scores=scores,
@@ -845,17 +492,106 @@ class MemoryManager:
             original_data=original_data,
             total_count=total_count,
             has_more=False,
-            query_metadata=Metadata(
-                source="hybrid_retrieval",
-                user_id=user_id,
-                memory_type="retrieve_hybrid",
-            ),
-            metadata=Metadata(
-                source="hybrid_retrieval",
-                user_id=user_id,
-                memory_type="retrieve_hybrid",
-            ),
+            query_metadata=Metadata(source=source_type, user_id=user_id or "", memory_type=memory_type),
+            metadata=Metadata(source=source_type, user_id=user_id or "", memory_type=memory_type),
         )
+
+    # --------- RRF retrieval (keyword + vector + RRF fusion, no rerank) ---------
+    @trace_logger(operation_name="agentic_layer RRF memory retrieval")
+    async def retrieve_mem_rrf(
+        self, retrieve_mem_request: 'RetrieveMemRequest'
+    ) -> RetrieveMemResponse:
+        """RRF-based memory retrieval: keyword + vector + RRF fusion"""
+        try:
+            hits = await self._search_rrf(retrieve_mem_request)
+            return await self._to_response(hits, retrieve_mem_request)
+        except Exception as e:
+            logger.error(f"Error in retrieve_mem_rrf: {e}", exc_info=True)
+            return await self._to_response([], retrieve_mem_request)
+
+    # --------- Agentic retrieval (LLM-guided multi-round) ---------
+    @trace_logger(operation_name="agentic_layer Agentic memory retrieval")
+    async def retrieve_mem_agentic(
+        self, retrieve_mem_request: 'RetrieveMemRequest'
+    ) -> RetrieveMemResponse:
+        """Agentic retrieval: LLM-guided multi-round intelligent retrieval
+        
+        Process: Round 1 (Hybrid) → Rerank → LLM sufficiency check → Round 2 (multi-query) → Merge → Final Rerank
+        """
+        
+
+        req = retrieve_mem_request  # alias
+        top_k = req.top_k
+        config = AgenticConfig()
+        
+        try:
+            llm_provider = LLMProvider(
+                provider_type=os.getenv("LLM_PROVIDER", "openai"),
+                model=os.getenv("LLM_MODEL", "Qwen3-235B"),
+                base_url=os.getenv("LLM_BASE_URL"),
+                api_key=os.getenv("LLM_API_KEY", "123"),
+                temperature=float(os.getenv("LLM_TEMPERATURE", "0.3")),
+                max_tokens=int(os.getenv("LLM_MAX_TOKENS", "16384")),
+            )
+
+            logger.info(f"Agentic Retrieval: {req.query[:60]}...")
+
+            # ========== Round 1: Hybrid search ==========
+            req1 = RetrieveMemRequest(
+                query=req.query, user_id=req.user_id, group_id=req.group_id,
+                top_k=config.round1_top_n, memory_types=req.memory_types,
+            )
+            round1 = await self._search_hybrid(req1)
+            logger.info(f"Round 1: {len(round1)} memories")
+
+            if not round1:
+                return await self._to_response([], req)
+
+            # ========== Rerank → Top 5 for LLM ==========
+            topn = await self._rerank(req.query, round1, config.round1_rerank_top_n)
+            topn_pairs = [(m, m.get("score", 0)) for m in topn]
+
+            # ========== LLM sufficiency check ==========
+            is_sufficient, reasoning, missing_info = await check_sufficiency(
+                query=req.query, results=topn_pairs, llm_provider=llm_provider, max_docs=config.round1_rerank_top_n
+            )
+            logger.info(f"LLM: {'Sufficient' if is_sufficient else 'Insufficient'} - {reasoning}")
+
+            if is_sufficient:
+                return await self._to_response(round1[:top_k], req)
+
+            # ========== Round 2: Multi-query ==========
+            refined_queries, _ = await generate_multi_queries(
+                original_query=req.query, results=topn_pairs, missing_info=missing_info,
+                llm_provider=llm_provider, max_docs=config.round1_rerank_top_n, num_queries=config.num_queries,
+            )
+            logger.info(f"Generated {len(refined_queries)} queries")
+
+            # Parallel hybrid search
+            async def do_search(q: str) -> List[Dict]:
+                return await self._search_hybrid(
+                    RetrieveMemRequest(
+                        query=q, user_id=req.user_id, group_id=req.group_id,
+                        top_k=config.round2_per_query_top_n, memory_types=req.memory_types,
+                    )
+                )
+
+            round2_results = await asyncio.gather(*[do_search(q) for q in refined_queries], return_exceptions=True)
+            all_round2 = [h for r in round2_results if not isinstance(r, Exception) for h in r]
+
+            # Deduplicate and merge
+            seen_ids = {m.get("id") for m in round1}
+            round2_unique = [m for m in all_round2 if m.get("id") not in seen_ids]
+            combined = round1 + round2_unique[:config.combined_total - len(round1)]
+            logger.info(f"Combined: {len(combined)} memories")
+
+            # ========== Final Rerank ==========
+            final = await self._rerank(req.query, combined, top_k)
+            return await self._to_response(final[:top_k], req)
+
+        except Exception as e:
+            logger.error(f"Error in retrieve_mem_agentic: {e}", exc_info=True)
+            return await self._to_response([], req)
 
     def _calculate_importance_score(
         self, importance_evidence: Optional[Dict[str, Any]]
@@ -1220,812 +956,3 @@ class MemoryManager:
         )
         return memories, scores, importance_scores, original_data, total_count
 
-    # --------- Lightweight retrieval (Embedding + BM25 + RRF)---------
-    @trace_logger(operation_name="agentic_layer lightweight retrieval")
-    async def retrieve_lightweight(
-        self,
-        query: str,
-        user_id: str = None,
-        group_id: str = None,
-        time_range_days: int = 365,
-        top_k: int = 20,
-        retrieval_mode: str = "rrf",  # "embedding" | "bm25" | "rrf"
-        data_source: str = "episode",  # "episode" | "event_log" | "foresight" | "profile"
-        current_time: Optional[
-            datetime
-        ] = None,  # Current time, used to filter foresight within validity period
-        radius: Optional[float] = None,  # COSINE similarity threshold
-    ) -> Dict[str, Any]:
-        """
-        Lightweight memory retrieval (unified use of Milvus/ES retrieval)
-
-        Args:
-            query: User query
-            user_id: User ID (for filtering)
-            group_id: Group ID (for filtering; required for profile data source)
-            time_range_days: Time range in days
-            top_k: Number of results to return
-            retrieval_mode: Retrieval mode
-                - "embedding": Pure vector retrieval (via Milvus)
-                - "bm25": Pure keyword retrieval (via ES)
-                - "rrf": RRF fusion (default, Milvus + ES)
-            data_source: Data source
-                - "episode": Retrieve from episode (default)
-                - "event_log": Retrieve from event_log
-                - "foresight": Retrieve from foresight
-                - "profile": Directly retrieve profile by user_id + group_id
-            current_time: Current time, used to filter foresight within validity period (only valid when data_source=foresight)
-
-        Returns:
-            Dict containing memories, metadata
-        """
-        start_time = time.time()
-
-        # Compatible with old parameter names
-        if data_source == "memcell":
-            data_source = "episode"
-
-        if data_source == "profile":
-            if not user_id or not group_id:
-                raise ValueError(
-                    "user_id and group_id must be provided when retrieving profile"
-                )
-            return await self._retrieve_profile_memories(
-                user_id=user_id, group_id=group_id, top_k=top_k, start_time=start_time
-            )
-
-        return await self._retrieve_from_vector_stores(
-            query=query,
-            user_id=user_id,  # Pass directly, no modification
-            group_id=group_id,  # Pass directly, no modification
-            top_k=top_k,
-            retrieval_mode=retrieval_mode,
-            data_source=data_source,
-            start_time=start_time,
-            current_time=current_time,
-            radius=radius,
-        )
-
-    async def _retrieve_from_vector_stores(
-        self,
-        query: str,
-        user_id: str = None,
-        group_id: str = None,
-        top_k: int = 20,
-        retrieval_mode: str = "rrf",
-        data_source: str = "memcell",
-        start_time: float = None,
-        current_time: Optional[datetime] = None,
-        radius: Optional[float] = None,
-    ) -> Dict[str, Any]:
-        """
-        Unified vector store retrieval method (supports embedding, bm25, rrf three modes)
-
-        Args:
-            query: Query text
-            user_id: User ID filter
-            group_id: Group ID filter
-            top_k: Number of results to return
-            retrieval_mode: Retrieval mode (embedding/bm25/rrf)
-            data_source: Data source (memcell/event_log/foresight)
-            start_time: Start time (for calculating latency)
-            current_time: Current time, used to filter foresight within validity period (only valid when data_source=foresight)
-            radius: COSINE similarity threshold (only valid for non-foresight)
-
-        Returns:
-            Dict containing memories, metadata
-        """
-        if start_time is None:
-            start_time = time.time()
-
-        try:
-            # 1. Embedding retrieval (via Milvus, select different Repository based on data_source)
-            embedding_results = []
-            embedding_count = 0
-
-            if retrieval_mode in ["embedding", "rrf"]:
-                # Select Milvus repository based on data_source
-                match data_source:
-                    case MemoryType.FORESIGHT.value:
-                        milvus_repo = get_bean_by_type(ForesightMilvusRepository)
-                    case MemoryType.EVENT_LOG.value:
-                        milvus_repo = get_bean_by_type(EventLogMilvusRepository)
-                    case MemoryType.EPISODIC_MEMORY.value:
-                        milvus_repo = get_bean_by_type(EpisodicMemoryMilvusRepository)
-                    case _:
-                        raise ValueError(f"Unsupported memory type: {data_source}")
-
-                vectorize_service = get_vectorize_service()
-
-                # Generate query vector
-                query_vec = await vectorize_service.get_embedding(query)
-
-                # Vector retrieval
-                # Note: To ensure enough candidates are retrieved, increase limit
-                # Milvus limit: topk maximum is 16384
-                # To solve the issue of EventLog/Foresight returning only 1 result, significantly increase limit
-                retrieval_limit = min(
-                    max(top_k * 200, 1000), 16384
-                )  # At least 1000, maximum 16384
-
-                # Call vector_search with different parameters based on data_source
-                milvus_kwargs = dict(
-                    query_vector=query_vec,
-                    user_id=user_id,
-                    group_id=group_id,
-                    limit=retrieval_limit,
-                    radius=radius,
-                )
-                if data_source == "foresight":
-                    milvus_kwargs["current_time"] = current_time
-
-                logger.info(
-                    f"Calling Milvus retrieval: data_source={data_source}, "
-                    f"limit={retrieval_limit}, radius={radius}, "
-                    f"user_id={user_id}, group_id={group_id}"
-                )
-                milvus_results = await milvus_repo.vector_search(**milvus_kwargs)
-
-                # Process Milvus retrieval results
-                # Determine metric type based on data_source:
-                # - foresight and episode use COSINE, score is similarity (range -1 to 1)
-                # - event_log uses L2, score is distance (range 0 to +∞), needs conversion to similarity
-                for result in milvus_results:
-                    score = result.get('score', 0)
-                    # All data sources use COSINE uniformly, similarity is score
-                    similarity = score
-                    embedding_results.append((result, similarity))
-                    if result.get('content'):
-                        result['foresight'] = result['content']
-
-                # Sort by similarity
-                embedding_results.sort(key=lambda x: x[1], reverse=True)
-                logger.info(
-                    f"Milvus retrieval completed: data_source={data_source}, "
-                    f"result count={len(embedding_results)}, "
-                    f"query={query[:30]}, "
-                    f"user_id={user_id}, group_id={group_id}"
-                )
-                embedding_count = len(embedding_results)
-
-            # 2. BM25 retrieval (via Elasticsearch)
-            bm25_results = []
-            bm25_count = 0
-
-            if retrieval_mode in ["bm25", "rrf"]:
-                # Select ES repository based on data_source
-                match data_source:
-                    case MemoryType.FORESIGHT.value:
-                        es_repo = get_bean_by_type(ForesightEsRepository)
-                    case MemoryType.EVENT_LOG.value:
-                        es_repo = get_bean_by_type(EventLogEsRepository)
-                    case MemoryType.EPISODIC_MEMORY.value:
-                        es_repo = get_bean_by_type(EpisodicMemoryEsRepository)
-                    case _:
-                        raise ValueError(f"Unsupported memory type: {data_source}")
-
-                raw_query_words = list(jieba.cut(query))
-                query_words = filter_stopwords(raw_query_words, min_length=2)
-
-                logger.debug(
-                    f"BM25 retrieval: data_source={data_source}, query={query}, "
-                    f"raw_query_words={raw_query_words}, query_words={query_words}"
-                )
-
-                # Call ES retrieval
-                # Note: To ensure enough candidates are retrieved, increase size
-                retrieval_size = max(top_k * 10, 100)  # At least 100 candidates
-
-                es_kwargs = dict(
-                    query=query_words,
-                    user_id=user_id,
-                    group_id=group_id,
-                    size=retrieval_size,
-                )
-                if data_source == "foresight" and current_time is not None:
-                    es_kwargs["current_time"] = current_time
-                hits = await es_repo.multi_search(**es_kwargs)
-
-                # Process ES retrieval results (no longer secondary filtering based on whether user_id is empty)
-                for hit in hits:
-                    source = hit.get('_source', {})
-                    bm25_score = hit.get('_score', 0)
-                    metadata = source.get('extend', {})
-                    result = {
-                        'score': bm25_score,
-                        'id': hit.get('_id', ''),
-                        'user_id': source.get('user_id', ''),
-                        'group_id': source.get('group_id', ''),
-                        'timestamp': source.get('timestamp', ''),
-                        'episode': source.get('episode', ''),
-                        'foresight': source.get('foresight', ''),
-                        'evidence': source.get('evidence', ''),
-                        'atomic_fact': source.get('atomic_fact', ''),
-                        'search_content': source.get('search_content', []),
-                        'metadata': metadata,
-                    }
-                    if isinstance(metadata, dict):
-                        result['start_time'] = metadata.get('start_time')
-                        result['end_time'] = metadata.get('end_time')
-                    else:
-                        result['start_time'] = None
-                        result['end_time'] = None
-                    bm25_results.append((result, bm25_score))
-                logger.debug(
-                    f"ES retrieval completed: data_source={data_source}, result count={len(bm25_results)}"
-                )
-                bm25_count = len(bm25_results)
-
-            # 3. Return results based on mode
-            if retrieval_mode == "embedding":
-                # Pure vector retrieval
-                final_results = embedding_results[:top_k]
-                memories = [
-                    {
-                        'score': score,
-                        'id': result.get('id', ''),
-                        'user_id': result.get('user_id', ''),
-                        'group_id': result.get('group_id', ''),
-                        'timestamp': result.get('timestamp', ''),
-                        'subject': result.get('metadata', {}).get('title', ''),
-                        'episode': (
-                            result.get('episode', '')
-                            if data_source == "episode"
-                            else (
-                                result.get('content', '')
-                                if data_source == "foresight"
-                                else result.get('atomic_fact', '')
-                            )
-                        ),
-                        'summary': result.get('metadata', {}).get('summary', ''),
-                        'evidence': (
-                            result.get('evidence', '')
-                            if data_source == "foresight"
-                            else ''
-                        ),
-                        'atomic_fact': result.get('atomic_fact', ''),
-                        'metadata': result.get('metadata', {}),
-                    }
-                    for result, score in final_results
-                ]
-
-                metadata = {
-                    "retrieval_mode": "embedding",
-                    "data_source": data_source,
-                    "embedding_candidates": embedding_count,
-                    "total_latency_ms": (time.time() - start_time) * 1000,
-                }
-                memories = self._filter_foresight_memories_by_time(
-                    memories, data_source, current_time
-                )
-                metadata["final_count"] = len(memories)
-
-            elif retrieval_mode == "bm25":
-                # Pure BM25 retrieval
-                final_results = bm25_results[:top_k]
-                memories = [result for result, score in final_results]
-
-                metadata = {
-                    "retrieval_mode": "bm25",
-                    "data_source": data_source,
-                    "bm25_candidates": bm25_count,
-                    "total_latency_ms": (time.time() - start_time) * 1000,
-                }
-                memories = self._filter_foresight_memories_by_time(
-                    memories, data_source, current_time
-                )
-                metadata["final_count"] = len(memories)
-
-            else:  # rrf
-                # RRF fusion
-                from agentic_layer.retrieval_utils import reciprocal_rank_fusion
-
-                fused_results = reciprocal_rank_fusion(
-                    embedding_results, bm25_results, k=60
-                )
-
-                final_results = fused_results[:top_k]
-
-                # Unified format
-                memories = []
-                for doc, rrf_score in final_results:
-                    # doc may come from Milvus or ES, need unified format
-                    # Differentiation method: Milvus has 'id' field, ES has 'event_id' field
-                    if 'event_id' in doc and 'id' not in doc:
-                        # Result from ES (already in standard format)
-                        memory = {
-                            'score': rrf_score,
-                            'event_id': doc.get('event_id', ''),
-                            'user_id': doc.get('user_id', ''),
-                            'group_id': doc.get('group_id', ''),
-                            'timestamp': doc.get('timestamp', ''),
-                            'subject': '',
-                            'episode': doc.get('episode', ''),
-                            'summary': '',
-                            'evidence': doc.get('evidence', ''),
-                            'atomic_fact': doc.get('atomic_fact', ''),
-                            'metadata': doc.get('metadata', {}),
-                            'start_time': doc.get('start_time'),
-                            'end_time': doc.get('end_time'),
-                        }
-                    else:
-                        # Result from Milvus (need to convert field names)
-                        # Get correct content field based on data_source
-                        content_field = 'episode'  # default
-                        evidence_field = ''
-                        if data_source == "foresight":
-                            content_field = 'content'
-                            evidence_field = doc.get('evidence', '')
-                        elif data_source == "event_log":
-                            content_field = 'atomic_fact'
-
-                        start_val = doc.get('start_time')
-                        end_val = doc.get('end_time')
-                        memory = {
-                            'score': rrf_score,
-                            'event_id': doc.get('id', ''),  # Milvus uses 'id'
-                            'user_id': doc.get('user_id', ''),
-                            'group_id': doc.get('group_id', ''),
-                            'timestamp': doc.get('timestamp', ''),
-                            'subject': (
-                                doc.get('metadata', {}).get('title', '')
-                                if isinstance(doc.get('metadata'), dict)
-                                else ''
-                            ),
-                            'episode': doc.get(content_field, ''),
-                            'summary': (
-                                doc.get('metadata', {}).get('summary', '')
-                                if isinstance(doc.get('metadata'), dict)
-                                else ''
-                            ),
-                            'evidence': evidence_field,
-                            'atomic_fact': doc.get('atomic_fact', ''),
-                            'metadata': (
-                                doc.get('metadata', {})
-                                if isinstance(doc.get('metadata'), dict)
-                                else {}
-                            ),
-                            'start_time': self._format_datetime_field(start_val),
-                            'end_time': self._format_datetime_field(end_val),
-                        }
-                    memories.append(memory)
-
-                metadata = {
-                    "retrieval_mode": "rrf",
-                    "data_source": data_source,
-                    "embedding_candidates": embedding_count,
-                    "bm25_candidates": bm25_count,
-                    "total_latency_ms": (time.time() - start_time) * 1000,
-                }
-                memories = self._filter_foresight_memories_by_time(
-                    memories, data_source, current_time
-                )
-                metadata["final_count"] = len(memories)
-
-            return {"memories": memories, "count": len(memories), "metadata": metadata}
-
-        except Exception as e:
-            logger.error(f"Vector store retrieval failed: {e}", exc_info=True)
-            return {
-                "memories": [],
-                "count": 0,
-                "metadata": {
-                    "retrieval_mode": retrieval_mode,
-                    "data_source": data_source,
-                    "error": str(e),
-                    "total_latency_ms": (time.time() - start_time) * 1000,
-                },
-            }
-
-    async def _retrieve_profile_memories(
-        self, user_id: str, group_id: str, top_k: int, start_time: float
-    ) -> Dict[str, Any]:
-        """Directly read user profile from user_profiles collection"""
-        doc = await UserProfile.find_one(
-            UserProfile.user_id == user_id,
-            UserProfile.group_id == group_id,
-            sort=[("version", -1)],
-        )
-
-        memories: List[Dict[str, Any]] = []
-        if doc:
-            memories.append(
-                {
-                    "user_id": doc.user_id,
-                    "group_id": doc.group_id,
-                    "profile": doc.profile_data,
-                    "scenario": doc.scenario,
-                    "confidence": doc.confidence,
-                    "version": doc.version,
-                    "cluster_ids": doc.cluster_ids,
-                    "memcell_count": doc.memcell_count,
-                    "last_updated_cluster": doc.last_updated_cluster,
-                    "updated_at": (
-                        doc.updated_at.isoformat() if doc.updated_at else None
-                    ),
-                }
-            )
-
-        metadata = {
-            "retrieval_mode": "direct",
-            "data_source": "profile",
-            "profile_count": len(memories),
-            "total_latency_ms": (time.time() - start_time) * 1000,
-        }
-
-        return {
-            "memories": memories[:top_k],
-            "count": len(memories[:top_k]),
-            "metadata": metadata,
-        }
-
-    @staticmethod
-    def _format_datetime_field(value: Any) -> Optional[str]:
-        if isinstance(value, datetime):
-            return value.isoformat()
-        return value
-
-    @staticmethod
-    def _parse_datetime_value(value: Any) -> Optional[datetime]:
-        if isinstance(value, datetime):
-            return value
-        if isinstance(value, str) and value:
-            try:
-                return datetime.fromisoformat(value)
-            except ValueError:
-                try:
-                    return datetime.fromisoformat(value.replace("Z", "+00:00"))
-                except ValueError:
-                    return None
-        return None
-
-    def _filter_foresight_memories_by_time(
-        self,
-        memories: List[Dict[str, Any]],
-        data_source: str,
-        current_time: Optional[datetime],
-    ) -> List[Dict[str, Any]]:
-        if data_source != "foresight" or not current_time:
-            return memories
-        current_dt = (
-            current_time
-            if isinstance(current_time, datetime)
-            else self._parse_datetime_value(current_time)
-        )
-        if current_dt is None:
-            return memories
-
-        filtered = []
-        for memory in memories:
-            start_dt = self._parse_datetime_value(memory.get("start_time"))
-            end_dt = self._parse_datetime_value(memory.get("end_time"))
-
-            if start_dt and start_dt > current_dt:
-                continue
-            if end_dt and end_dt < current_dt:
-                continue
-            filtered.append(memory)
-        return filtered
-
-    # --------- Agentic retrieval (LLM-guided multi-round retrieval)---------
-    @trace_logger(operation_name="agentic_layer Agentic retrieval")
-    async def retrieve_agentic(
-        self,
-        query: str,
-        user_id: str = None,
-        group_id: str = None,
-        time_range_days: int = 365,
-        top_k: int = 20,
-        llm_provider=None,
-        agentic_config=None,
-    ) -> Dict[str, Any]:
-        """Agentic retrieval: LLM-guided multi-round intelligent retrieval
-
-        Process: Round 1 (RRF retrieval) → Rerank → LLM judgment → Round 2 (multi-query) → Fusion → Rerank
-        """
-        # Validate parameters
-        if llm_provider is None:
-            raise ValueError("llm_provider is required for agentic retrieval")
-
-        # Import dependencies
-        from .agentic_utils import (
-            AgenticConfig,
-            check_sufficiency,
-            generate_multi_queries,
-            format_documents_for_llm,
-        )
-        from .rerank_service import get_rerank_service
-
-        # Use default configuration
-        if agentic_config is None:
-            agentic_config = AgenticConfig()
-        config = agentic_config
-
-        start_time = time.time()
-        metadata = {
-            "retrieval_mode": "agentic",
-            "is_multi_round": False,
-            "round1_count": 0,
-            "round1_reranked_count": 0,
-            "is_sufficient": None,
-            "reasoning": None,
-            "missing_info": None,
-            "refined_queries": None,
-            "round2_count": 0,
-            "final_count": 0,
-            "total_latency_ms": 0.0,
-        }
-
-        logger.info(f"{'='*60}")
-        logger.info(f"Agentic Retrieval: {query[:60]}...")
-        logger.info(f"{'='*60}")
-
-        try:
-            # ========== Round 1: RRF hybrid retrieval ==========
-            logger.info("Round 1: RRF retrieval...")
-
-            round1_result = await self.retrieve_lightweight(
-                query=query,
-                user_id=user_id,
-                group_id=group_id,
-                time_range_days=time_range_days,
-                top_k=config.round1_top_n,  # 20
-                retrieval_mode="rrf",
-                data_source="episode",
-            )
-
-            round1_memories = round1_result.get("memories", [])
-            metadata["round1_count"] = len(round1_memories)
-            metadata["round1_latency_ms"] = round1_result.get("metadata", {}).get(
-                "total_latency_ms", 0
-            )
-
-            logger.info(f"Round 1: Retrieved {len(round1_memories)} memories")
-
-            if not round1_memories:
-                logger.warning("Round 1 returned no results")
-                metadata["total_latency_ms"] = (time.time() - start_time) * 1000
-                return {"memories": [], "count": 0, "metadata": metadata}
-
-            # ========== Rerank Round 1 results → Top 5 ==========
-            if config.use_reranker:
-                logger.info("Reranking Top 20 to Top 5 for sufficiency check...")
-                rerank_service = get_rerank_service()
-
-                # Convert format for rerank
-                candidates_for_rerank = [
-                    {
-                        "index": i,
-                        "episode": mem.get("episode", ""),
-                        "summary": mem.get("summary", ""),
-                        "subject": mem.get("subject", ""),
-                        "score": mem.get("score", 0),
-                    }
-                    for i, mem in enumerate(round1_memories)
-                ]
-
-                reranked_hits = await rerank_service._rerank_all_hits(
-                    query, candidates_for_rerank, top_k=config.round1_rerank_top_n
-                )
-
-                # Extract Top 5 for LLM judgment
-                top5_for_llm = []
-                for hit in reranked_hits[: config.round1_rerank_top_n]:
-                    idx = hit.get("index", 0)
-                    if 0 <= idx < len(round1_memories):
-                        mem = round1_memories[idx]
-                        # Convert to (candidate, score) format for LLM use
-                        top5_for_llm.append((mem, hit.get("score", 0)))
-
-                metadata["round1_reranked_count"] = len(top5_for_llm)
-                logger.info(
-                    f"Rerank: Got Top {len(top5_for_llm)} for sufficiency check"
-                )
-            else:
-                # No reranker, directly take top 5
-                top5_for_llm = [
-                    (mem, mem.get("score", 0))
-                    for mem in round1_memories[: config.round1_rerank_top_n]
-                ]
-                metadata["round1_reranked_count"] = len(top5_for_llm)
-                logger.info("No Rerank: Using original Top 5")
-
-            if not top5_for_llm:
-                logger.warning("No results for sufficiency check")
-                metadata["total_latency_ms"] = (time.time() - start_time) * 1000
-                return round1_result
-
-            # ========== LLM check sufficiency ==========
-            logger.info("LLM: Checking sufficiency on Top 5...")
-
-            is_sufficient, reasoning, missing_info = await check_sufficiency(
-                query=query,
-                results=top5_for_llm,
-                llm_provider=llm_provider,
-                max_docs=config.round1_rerank_top_n,
-            )
-
-            metadata["is_sufficient"] = is_sufficient
-            metadata["reasoning"] = reasoning
-            metadata["missing_info"] = missing_info
-
-            logger.info(
-                f"LLM Result: {'✅ Sufficient' if is_sufficient else '❌ Insufficient'}"
-            )
-            logger.info(f"LLM Reasoning: {reasoning}")
-
-            # ========== If sufficient: directly return Round 1 results ==========
-            if is_sufficient:
-                logger.info("Decision: Sufficient! Using Round 1 results")
-                metadata["final_count"] = len(round1_memories)
-                metadata["total_latency_ms"] = (time.time() - start_time) * 1000
-
-                round1_result["metadata"] = metadata
-                logger.info(f"Complete: Latency {metadata['total_latency_ms']:.0f}ms")
-                return round1_result
-
-            # ========== Round 2: LLM generate multiple refined queries ==========
-            metadata["is_multi_round"] = True
-            logger.info("Decision: Insufficient, entering Round 2")
-
-            if missing_info:
-                logger.info(f"Missing: {', '.join(missing_info)}")
-
-            if config.enable_multi_query:
-                logger.info("LLM: Generating multiple refined queries...")
-
-                refined_queries, query_strategy = await generate_multi_queries(
-                    original_query=query,
-                    results=top5_for_llm,
-                    missing_info=missing_info,
-                    llm_provider=llm_provider,
-                    max_docs=config.round1_rerank_top_n,
-                    num_queries=config.num_queries,
-                )
-
-                metadata["refined_queries"] = refined_queries
-                metadata["query_strategy"] = query_strategy
-                metadata["num_queries"] = len(refined_queries)
-
-                logger.info(f"Generated {len(refined_queries)} queries")
-                for i, q in enumerate(refined_queries, 1):
-                    logger.debug(f"  Query {i}: {q[:80]}...")
-            else:
-                # Single query mode
-                refined_queries = [query]
-                metadata["refined_queries"] = refined_queries
-                metadata["num_queries"] = 1
-
-            # ========== Round 2: Parallel execute multi-query retrieval ==========
-            logger.info(
-                f"Round 2: Executing {len(refined_queries)} queries in parallel..."
-            )
-
-            # Parallel call retrieve_lightweight
-            round2_tasks = [
-                self.retrieve_lightweight(
-                    query=q,
-                    user_id=user_id,
-                    group_id=group_id,
-                    time_range_days=time_range_days,
-                    top_k=config.round2_per_query_top_n,  # 50 per query
-                    retrieval_mode="rrf",
-                    data_source="episode",
-                )
-                for q in refined_queries
-            ]
-
-            round2_results_list = await asyncio.gather(
-                *round2_tasks, return_exceptions=True
-            )
-
-            # Collect results from all queries
-            all_round2_memories = []
-            for i, result in enumerate(round2_results_list, 1):
-                if isinstance(result, Exception):
-                    logger.error(f"Query {i} failed: {result}")
-                    continue
-
-                memories = result.get("memories", [])
-                if memories:
-                    all_round2_memories.extend(memories)
-                    logger.debug(f"Query {i}: Retrieved {len(memories)} memories")
-
-            logger.info(
-                f"Round 2: Total retrieved {len(all_round2_memories)} memories before dedup"
-            )
-
-            # ========== Deduplicate and merge ==========
-            logger.info("Merge: Deduplicating and combining Round 1 + Round 2...")
-
-            # Deduplicate: use event_id
-            round1_event_ids = {mem.get("event_id") for mem in round1_memories}
-            round2_unique = [
-                mem
-                for mem in all_round2_memories
-                if mem.get("event_id") not in round1_event_ids
-            ]
-
-            # Merge: Round 1 (20) + Round 2 deduplicated results (take up to total 40)
-            combined_memories = round1_memories.copy()
-            needed_from_round2 = config.combined_total - len(combined_memories)
-            combined_memories.extend(round2_unique[:needed_from_round2])
-
-            metadata["round2_count"] = len(round2_unique[:needed_from_round2])
-            logger.info(
-                f"Merge: Round1={len(round1_memories)}, Round2_unique={len(round2_unique[:needed_from_round2])}, Total={len(combined_memories)}"
-            )
-
-            # ========== Final Rerank ==========
-            if config.use_reranker and len(combined_memories) > 0:
-                logger.info(f"Rerank: Reranking {len(combined_memories)} memories...")
-
-                rerank_service = get_rerank_service()
-
-                # Convert format
-                candidates_for_rerank = [
-                    {
-                        "index": i,
-                        "episode": mem.get("episode", ""),
-                        "summary": mem.get("summary", ""),
-                        "subject": mem.get("subject", ""),
-                        "score": mem.get("score", 0),
-                    }
-                    for i, mem in enumerate(combined_memories)
-                ]
-
-                reranked_hits = await rerank_service._rerank_all_hits(
-                    query,  # Use original query
-                    candidates_for_rerank,
-                    top_k=config.final_top_n,
-                )
-
-                # Extract final Top 20
-                final_memories = []
-                for hit in reranked_hits[: config.final_top_n]:
-                    idx = hit.get("index", 0)
-                    if 0 <= idx < len(combined_memories):
-                        mem = combined_memories[idx].copy()
-                        mem["score"] = hit.get("score", mem.get("score", 0))
-                        final_memories.append(mem)
-
-                logger.info(f"Rerank: Final Top {len(final_memories)} selected")
-            else:
-                # No Reranker, directly return Top N
-                final_memories = combined_memories[: config.final_top_n]
-                logger.info(f"No Rerank: Returning Top {len(final_memories)}")
-
-            metadata["final_count"] = len(final_memories)
-            metadata["total_latency_ms"] = (time.time() - start_time) * 1000
-
-            logger.info(
-                f"Complete: Final {len(final_memories)} memories | Latency {metadata['total_latency_ms']:.0f}ms"
-            )
-            logger.info(f"{'='*60}\n")
-
-            return {
-                "memories": final_memories,
-                "count": len(final_memories),
-                "metadata": metadata,
-            }
-
-        except Exception as e:
-            logger.error(f"Agentic retrieval failed: {e}", exc_info=True)
-
-            # Fallback to lightweight
-            logger.warning("Falling back to lightweight retrieval")
-
-            fallback_result = await self.retrieve_lightweight(
-                query=query,
-                user_id=user_id,
-                group_id=group_id,
-                time_range_days=time_range_days,
-                top_k=top_k,
-                retrieval_mode="rrf",
-                data_source="episode",
-            )
-
-            fallback_result["metadata"]["retrieval_mode"] = "agentic_fallback"
-            fallback_result["metadata"]["fallback_reason"] = str(e)
-
-            return fallback_result

@@ -76,7 +76,7 @@ class SimpleMemoryManager:
 
     def __init__(
         self,
-        base_url: str = "http://localhost:8001",
+        base_url: str = "http://localhost:1995",
         group_id: str = "default_group",
         scene: str = "assistant",
     ):
@@ -91,9 +91,9 @@ class SimpleMemoryManager:
         self.group_id = group_id
         self.group_name = "Simple Demo Group"
         self.scene = scene
-        self.memorize_url = f"{base_url}/api/v3/agentic/memorize"
-        self.retrieve_url = f"{base_url}/api/v3/agentic/retrieve_lightweight"
-        self.conversation_meta_url = f"{base_url}/api/v3/agentic/conversation-meta"
+        self.memorize_url = f"{base_url}/api/v1/memories"
+        self.retrieve_url = f"{base_url}/api/v1/memories/search"
+        self.conversation_meta_url = f"{base_url}/api/v1/memories/conversation-meta"
         self._message_counter = 0
         self._conversation_meta_saved = False  # Flag to indicate if conversation-meta is saved
 
@@ -157,7 +157,7 @@ class SimpleMemoryManager:
         except httpx.ConnectError:
             print(f"  ❌ Cannot connect to API server ({self.base_url})")
             print(
-                f"     Please start first: uv run python src/run.py --port 8001"
+                f"     Please start first: uv run python src/run.py"
             )
             return False
         except Exception as e:
@@ -239,8 +239,11 @@ class SimpleMemoryManager:
             top_k: Number of results to return (default: 3)
             mode: Retrieval mode (default: "rrf")
                 - "rrf": RRF fusion (recommended)
-                - "embedding": Vector retrieval
-                - "bm25": Keyword retrieval
+                - "keyword": Keyword retrieval (BM25)
+                - "vector": Vector retrieval
+                - "hybrid": Keyword + Vector + Rerank
+                - "rrf": Keyword + Vector + RRF fusion
+                - "agentic": LLM-guided multi-round retrieval
             show_details: Whether to show detailed information (default: True)
 
         Returns:
@@ -249,22 +252,28 @@ class SimpleMemoryManager:
         payload = {
             "query": query,
             "top_k": top_k,
-            "data_source": "episode",
-            "retrieval_mode": mode,
+            "memory_types": "episodic_memory",
+            "retrieve_method": mode,
             "group_id": self.group_id,
         }
 
         try:
             async with httpx.AsyncClient(timeout=30.0) as client:
-                response = await client.post(self.retrieve_url, json=payload)
+                response = await client.get(self.retrieve_url, params=payload)
                 response.raise_for_status()
                 result = response.json()
 
                 if result.get("status") == "ok":
-                    # print(result)
-                    memories = result.get("result", {}).get("memories", [])
+                    # memories is grouped: [{"group_id": [Memory, ...]}, ...]
+                    raw_memories = result.get("result", {}).get("memories", [])
                     metadata = result.get("result", {}).get("metadata", {})
                     latency = metadata.get("total_latency_ms", 0)
+                    
+                    # Flatten grouped memories to flat list
+                    memories = []
+                    for group_dict in raw_memories:
+                        for group_id, mem_list in group_dict.items():
+                            memories.extend(mem_list)
 
                     if show_details:
                         print(

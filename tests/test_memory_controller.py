@@ -831,8 +831,8 @@ class MemoryControllerTester:
             # Validate source in metadata
             metadata = result["metadata"]
             assert (
-                metadata.get("source") == "hybrid_retrieval"
-            ), "Hybrid search source should be hybrid_retrieval"
+                metadata.get("source") == "hybrid"
+            ), "Hybrid search source should be hybrid"
 
         print(
             f"✅ Search Hybrid successful, returned {result['total_count']} groups of memories"

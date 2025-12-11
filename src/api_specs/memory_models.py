@@ -18,6 +18,8 @@ class RetrieveMethod(str, Enum):
     KEYWORD = "keyword"
     VECTOR = "vector"
     HYBRID = "hybrid"
+    RRF = "rrf"          # keyword + vector + RRF fusion
+    AGENTIC = "agentic"  # LLM-guided multi-round retrieval
 
 
 class MemoryType(str, Enum):

@@ -143,6 +143,9 @@ def convert_dict_to_retrieve_mem_request(
                     logger.error(f"Invalid memory_type: {mt}, skipping")
             elif isinstance(mt, MemoryType):
                 memory_types.append(mt)
+        # Default to EPISODIC_MEMORY if empty
+        if not memory_types:
+            memory_types = [MemoryType.EPISODIC_MEMORY]
 
         return RetrieveMemRequest(
             retrieve_method=retrieve_method,

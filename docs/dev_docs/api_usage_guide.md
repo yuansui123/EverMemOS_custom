@@ -6,7 +6,7 @@ This document provides detailed instructions on how to use MemSys API interfaces
 
 - [API Overview](#api-overview)
 - [Memory Storage APIs](#memory-storage-apis)
-  - [V3 Agentic API](#v3-agentic-api)
+  - [V1 Memory API](#v3-agentic-api)
   - [V1 Memory API](#v1-memory-api)
   - [API Selection Guide](#api-selection-guide)
 - [Group Chat Data Format](#group-chat-data-format)
@@ -21,12 +21,11 @@ MemSys provides two standardized API interfaces for storing memories:
 
 | API Type | Endpoint | Features | Recommended Use Case |
 |---------|---------|------|---------|
-| **V3 Agentic API** | `/api/v3/agentic/memorize` | Memory Storage + Intelligent Retrieval | Complete application scenarios requiring retrieval features |
-| **V1 Memory API** | `/api/v1/memories` | Pure Memory Storage | Simple scenarios requiring only storage functionality |
+| **V1 Memory API** | `/api/v1/memories` | Memory Storage + Intelligent Retrieval | Complete application scenarios requiring retrieval features |
 
 ### API Comparison
 
-| Feature | V3 Agentic API | V1 Memory API |
+| Feature | V1 Memory API | V1 Memory API |
 |-----|---------------|--------------|
 | Store Single Message | ✅ Supported | ✅ Supported |
 | Message Format | Simple direct single message format | Simple direct single message format |
@@ -34,20 +33,20 @@ MemSys provides two standardized API interfaces for storing memories:
 | Session Metadata Management | ✅ Supported | ✅ Supported (with PATCH updates) |
 | Use Case | Complete memory system (storage + retrieval) | Pure memory storage system |
 
-**Important Note**: Both APIs use identical storage formats, so you can choose based on your needs. If you need retrieval functionality, we recommend using V3 Agentic API for complete feature support.
+**Important Note**: Both APIs use identical storage formats, so you can choose based on your needs. If you need retrieval functionality, we recommend using V1 Memory API for complete feature support.
 
 ---
 
 ## 🚀 Memory Storage APIs
 
-### V3 Agentic API
+### V1 Memory API
 
 Recommended for scenarios requiring complete functionality (storage + retrieval).
 
 #### Endpoint
 
 ```
-POST /api/v3/agentic/memorize
+POST /api/v1/memories
 ```
 
 #### Features
@@ -57,7 +56,7 @@ POST /api/v3/agentic/memorize
 - ✅ Supports Agentic intelligent retrieval (LLM-assisted)
 - ✅ Supports session metadata management
 
-For detailed documentation, see: [Agentic V3 API Documentation](../api_docs/agentic_v3_api.md)
+For detailed documentation, see: [Memory API Documentation](../api_docs/memory_api.md)
 
 ---
 
@@ -83,7 +82,7 @@ For detailed documentation, see: [Memory API Documentation](../api_docs/memory_a
 
 ### API Selection Guide
 
-**Use V3 Agentic API (`/api/v3/agentic/memorize`)** if:
+**Use V1 Memory API (`/api/v1/memories`)** if:
 - ✅ You need intelligent retrieval functionality
 - ✅ You need to build a complete memory system (storage + retrieval)
 - ✅ You want to use lightweight or Agentic retrieval modes
@@ -93,7 +92,7 @@ For detailed documentation, see: [Memory API Documentation](../api_docs/memory_a
 - ✅ You have your own retrieval solution
 - ✅ You prefer a more concise dedicated storage interface
 
-**Note**: Both APIs use identical data formats and underlying storage mechanisms. The main difference is that V3 API provides additional retrieval functionality.
+**Note**: Both APIs use identical data formats and underlying storage mechanisms. The main difference is that V1 API provides additional retrieval functionality.
 
 ---
 
@@ -150,27 +149,7 @@ Both APIs use the same simple direct single message format:
 
 ### Call Examples
 
-The following examples show how to call both APIs. The request format is identical, only the URL differs.
-
 #### cURL
-
-**Using V3 Agentic API:**
-
-```bash
-curl -X POST http://localhost:1995/api/v3/agentic/memorize \
-  -H "Content-Type: application/json" \
-  -d '{
-    "message_id": "msg_001",
-    "create_time": "2025-02-01T10:00:00+08:00",
-    "sender": "user_103",
-    "sender_name": "Chen",
-    "content": "We need to complete the product design this week",
-    "group_id": "group_001",
-    "group_name": "Project Discussion Group"
-  }'
-```
-
-**Using V1 Memory API:**
 
 ```bash
 curl -X POST http://localhost:1995/api/v1/memories \
@@ -188,38 +167,11 @@ curl -X POST http://localhost:1995/api/v1/memories \
 
 #### Python
 
-**Using V3 Agentic API:**
-
 ```python
 import httpx
 import asyncio
 
-async def store_memory_v3():
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "http://localhost:1995/api/v3/agentic/memorize",
-            json={
-                "message_id": "msg_001",
-                "create_time": "2025-02-01T10:00:00+08:00",
-                "sender": "user_103",
-                "sender_name": "Chen",
-                "content": "We need to complete the product design this week",
-                "group_id": "group_001",
-                "group_name": "Project Discussion Group"
-            }
-        )
-        print(response.json())
-
-asyncio.run(store_memory_v3())
-```
-
-**Using V1 Memory API:**
-
-```python
-import httpx
-import asyncio
-
-async def store_memory_v1():
+async def store_memory():
     async with httpx.AsyncClient() as client:
         response = await client.post(
             "http://localhost:1995/api/v1/memories",
@@ -235,15 +187,13 @@ async def store_memory_v1():
         )
         print(response.json())
 
-asyncio.run(store_memory_v1())
+asyncio.run(store_memory())
 ```
 
 #### JavaScript
 
-**Using V3 Agentic API:**
-
 ```javascript
-fetch('http://localhost:1995/api/v3/agentic/memorize', {
+fetch('http://localhost:1995/api/v1/memories', {
   method: 'POST',
   headers: {
     'Content-Type': 'application/json'
@@ -353,14 +303,14 @@ src/run_memorize.py
 
 ### Basic Usage
 
-Run using the Bootstrap script, choose between V3 or V1 API:
+Run using the Bootstrap script with V1 API:
 
-**Using V3 Agentic API (Recommended, supports retrieval):**
+**Using V1 Memory API (Recommended, supports retrieval):**
 
 ```bash
 uv run python src/bootstrap.py src/run_memorize.py \
   --input data/group_chat.json \
-  --api-url http://localhost:1995/api/v3/agentic/memorize
+  --api-url http://localhost:1995/api/v1/memories
 ```
 
 **Using V1 Memory API (Storage only):**
@@ -383,23 +333,23 @@ uv run python src/bootstrap.py src/run_memorize.py \
 
 #### 1. Store Memories
 
-**Using V3 Agentic API:**
+**Using V1 Memory API:**
 
 ```bash
 # Basic usage
 uv run python src/bootstrap.py src/run_memorize.py \
   --input data/group_chat.json \
-  --api-url http://localhost:1995/api/v3/agentic/memorize
+  --api-url http://localhost:1995/api/v1/memories
 
 # Using relative path
 uv run python src/bootstrap.py src/run_memorize.py \
   --input ../my_data/chat_history.json \
-  --api-url http://localhost:1995/api/v3/agentic/memorize
+  --api-url http://localhost:1995/api/v1/memories
 
 # Specifying remote server
 uv run python src/bootstrap.py src/run_memorize.py \
   --input data/group_chat.json \
-  --api-url http://api.example.com/api/v3/agentic/memorize
+  --api-url http://api.example.com/api/v1/memories
 ```
 
 **Using V1 Memory API:**
@@ -450,7 +400,7 @@ uv run python src/bootstrap.py src/run_memorize.py \
 ======================================================================
 📄 Input File: /path/to/data/group_chat.json
 🔍 Validation Mode: No
-🌐 API Address: http://localhost:1995/api/v3/agentic/memorize
+🌐 API Address: http://localhost:1995/api/v1/memories
 ======================================================================
 
 ======================================================================
@@ -474,7 +424,7 @@ Starting to Call Memorize API for Each Message
 Group Name: Project Discussion Group
 Group ID: group_001
 Message Count: 20
-API Address: http://localhost:1995/api/v3/agentic/memorize
+API Address: http://localhost:1995/api/v1/memories
 
 --- Processing Message 1/20 ---
   ✓ Successfully saved 2 memories
@@ -564,12 +514,12 @@ After service starts, visit http://localhost:1995/docs to verify API documentati
 
 #### 4. Store Memories
 
-**Option A: Using V3 Agentic API (Recommended)**
+**Option A: Using V1 Memory API (Recommended)**
 
 ```bash
 uv run python src/bootstrap.py src/run_memorize.py \
   --input my_chat_data.json \
-  --api-url http://localhost:1995/api/v3/agentic/memorize
+  --api-url http://localhost:1995/api/v1/memories
 ```
 
 **Option B: Using V1 Memory API**
@@ -582,7 +532,7 @@ uv run python src/bootstrap.py src/run_memorize.py \
 
 #### 5. Verify Storage Results
 
-If using V3 Agentic API, you can query stored memories through the retrieval interface (see [Agentic V3 API Documentation](../api_docs/agentic_v3_api.md) for specific query APIs).
+If using V1 Memory API, you can query stored memories through the retrieval interface (see [Memory API Documentation](../api_docs/memory_api.md) for specific query APIs).
 
 ### Error Handling
 
@@ -625,7 +575,7 @@ Response content: {"error": "Internal server error"}
 
 ### API Documentation
 
-- [Agentic V3 API Documentation](../api_docs/agentic_v3_api.md) - Complete V3 API documentation (storage + retrieval)
+- [Memory API Documentation](../api_docs/memory_api.md) - Complete V1 API documentation (storage + retrieval)
 - [Memory API Documentation](../api_docs/memory_api.md) - Complete V1 Memory API documentation (focused on storage)
 
 ### Other Documentation
@@ -636,28 +586,22 @@ Response content: {"error": "Internal server error"}
 
 ## 💡 Best Practices
 
-1. **API Selection**
-   - Need intelligent retrieval features → Use V3 Agentic API
-   - Only need memory storage → Use V1 Memory API
-   - If unsure → Recommend V3 Agentic API (more complete features)
-   - Both APIs use same underlying storage, can switch anytime
-
-2. **Data Preparation**
+1. **Data Preparation**
    - Use standard GroupChatFormat
    - Ensure timestamps include timezone information
    - Provide complete user details
 
-3. **Batch Processing**
+2. **Batch Processing**
    - For large number of messages, use script to process one by one
    - Add appropriate delays to avoid server pressure
    - Monitor processing progress and errors
 
-4. **Error Recovery**
+3. **Error Recovery**
    - Log failed messages
    - Support resume from checkpoint
    - Regularly verify storage results
 
-5. **Performance Optimization**
+4. **Performance Optimization**
    - Set reasonable concurrency levels
    - Use batch interfaces (if available)
    - Monitor API response times

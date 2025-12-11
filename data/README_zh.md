@@ -108,7 +108,7 @@ EverMemOS 支持两种核心对话场景：
 - [GroupChatFormat 规范](../data_format/group_chat/group_chat_format.md)
 - [批量记忆化使用说明](../docs/dev_docs/run_memorize_usage.md)
 - [演示脚本指南](../demo/README_zh.md)
-- [API 文档](../docs/api_docs/agentic_v3_api.md)
+- [API 文档](../docs/api_docs/memory_api.md)
 
 ## 📊 示例数据统计
 

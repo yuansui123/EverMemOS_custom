@@ -109,18 +109,20 @@ class ChatOrchestrator:
         print()
         ui.section_heading(texts.get("retrieval_mode_selection_title"))
         print()
-        print(f"  [1] {texts.get('retrieval_mode_rrf')} - {texts.get('retrieval_mode_rrf_desc')}")
-        print(f"  [2] {texts.get('retrieval_mode_embedding')} - {texts.get('retrieval_mode_embedding_desc')}")
-        print(f"  [3] {texts.get('retrieval_mode_bm25')} - {texts.get('retrieval_mode_bm25_desc')}")
-        print(f"  [4] {texts.get('retrieval_mode_agentic')} - {texts.get('retrieval_mode_agentic_desc')}")
+        print(f"  [1] {texts.get('retrieval_mode_keyword')} - {texts.get('retrieval_mode_keyword_desc')}")
+        print(f"  [2] {texts.get('retrieval_mode_vector')} - {texts.get('retrieval_mode_vector_desc')}")
+        print(f"  [3] {texts.get('retrieval_mode_hybrid')} - {texts.get('retrieval_mode_hybrid_desc')}")
+        print(f"  [4] {texts.get('retrieval_mode_rrf')} - {texts.get('retrieval_mode_rrf_desc')}")
+        print(f"  [5] {texts.get('retrieval_mode_agentic')} - {texts.get('retrieval_mode_agentic_desc')}")
         print()
         
-        mode_map = {1: "rrf", 2: "embedding", 3: "bm25", 4: "agentic"}
+        mode_map = {1: "keyword", 2: "vector", 3: "hybrid", 4: "rrf", 5: "agentic"}
         mode_desc = {
-            1: texts.get('retrieval_mode_rrf'),
-            2: texts.get('retrieval_mode_embedding'),
-            3: texts.get('retrieval_mode_bm25'),
-            4: texts.get('retrieval_mode_agentic'),
+            1: texts.get('retrieval_mode_keyword'),
+            2: texts.get('retrieval_mode_vector'),
+            3: texts.get('retrieval_mode_hybrid'),
+            4: texts.get('retrieval_mode_rrf'),
+            5: texts.get('retrieval_mode_agentic'),
         }
         
         while True:
@@ -132,7 +134,7 @@ class ChatOrchestrator:
                 index = int(choice)
                 if index in mode_map:
                     # Special hint: Agentic mode requires LLM
-                    if index == 4:
+                    if index == 5:
                         print()
                         ui.note(texts.get("retrieval_mode_agentic_cost_warning"), icon="💰")
                         print()
@@ -180,7 +182,7 @@ class ChatOrchestrator:
             llm_config=llm_config,
             scenario_type=scenario_type,
             retrieval_mode=retrieval_mode,
-            data_source="episode",  # Fixed: use episode
+            data_source="episodic_memory",  # Use API memory_types value
             texts=texts,
         )
         

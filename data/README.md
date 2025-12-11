@@ -134,12 +134,12 @@ uv run python src/bootstrap.py src/run_memorize.py \
 # Store to memory system (English version)
 uv run python src/bootstrap.py src/run_memorize.py \
   --input data/group_chat_en.json \
-  --api-url http://localhost:8001/api/v3/agentic/memorize
+  --api-url http://localhost:8001/api/v1/memories
 
 # Store to memory system (Chinese version)
 uv run python src/bootstrap.py src/run_memorize.py \
   --input data/group_chat_zh.json \
-  --api-url http://localhost:8001/api/v3/agentic/memorize
+  --api-url http://localhost:8001/api/v1/memories
 ```
 
 ## 📝 Adding Your Own Data
@@ -170,7 +170,7 @@ To add your own conversation data:
 - [GroupChatFormat Specification](../data_format/group_chat/group_chat_format.md)
 - [Batch Memorization Usage](../docs/dev_docs/run_memorize_usage.md)
 - [Demo Scripts Guide](../demo/README.md)
-- [API Documentation](../docs/api_docs/agentic_v3_api.md)
+- [API Documentation](../docs/api_docs/memory_api.md)
 
 ## 📊 Sample Data Statistics
 

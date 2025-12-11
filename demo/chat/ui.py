@@ -154,11 +154,11 @@ class ChatUI:
             
             # Internationalized retrieval mode display
             mode_map = {
+                "keyword": texts.get("agentic_mode_keyword"),
+                "vector": texts.get("agentic_mode_vector"),
+                "hybrid": texts.get("agentic_mode_hybrid"),
                 "rrf": texts.get("agentic_mode_rrf"),
-                "embedding": texts.get("agentic_mode_embedding"),
-                "bm25": texts.get("agentic_mode_bm25"),
                 "agentic": texts.get("agentic_mode_agentic"),
-                "agentic_fallback": texts.get("agentic_mode_agentic_fallback"),
             }
             mode_text = mode_map.get(retrieval_mode, retrieval_mode)
             heading += f" | {mode_text} | {int(latency_ms)}ms"

@@ -95,7 +95,7 @@ EverMemOS 依赖多种数据库服务，通常通过 Docker Compose 启动。
 ## 5. 其他配置 (Others)
 
 ### API Server
-- `API_BASE_URL`: V3 API 的基础 URL，用于客户端连接 (默认 `http://localhost:8001`)
+- `API_BASE_URL`: V1 API 的基础 URL，用于客户端连接 (默认 `http://localhost:8001`)
 
 ### 环境与日志
 - `LOG_LEVEL`: 日志级别 (`INFO`, `DEBUG`, `WARNING`, `ERROR`)

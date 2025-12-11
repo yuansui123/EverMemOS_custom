@@ -375,7 +375,7 @@ if __name__ == "__main__":
 
 ## More Resources
 
-- 📖 [Memory Manager API Documentation](../docs/api_docs/agentic_v3_api.md)
+- 📖 [Memory Manager API Documentation](../docs/api_docs/memory_api.md)
 - 🔬 [Retrieval Evaluation](../../evaluation/locomo_evaluation/README.md)
 - 💡 [Best Practices](../docs/dev_docs/getting_started.md)
 

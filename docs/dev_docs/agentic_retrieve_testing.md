@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document explains how to test the Agentic retrieval feature of the V3 API. Agentic retrieval is an LLM-guided intelligent multi-round retrieval method that can automatically determine the sufficiency of retrieval results and perform multi-round optimization.
+This document explains how to test the Agentic retrieval feature of the V1 API. Agentic retrieval is an LLM-guided intelligent multi-round retrieval method that can automatically determine the sufficiency of retrieval results and perform multi-round optimization.
 
 ## Features
 
@@ -19,7 +19,7 @@ This document explains how to test the Agentic retrieval feature of the V3 API. 
 ### API Endpoint
 
 ```
-POST /api/v3/agentic/retrieve_agentic
+POST /api/v1/memories/search
 ```
 
 ### Request Format
@@ -155,7 +155,7 @@ uv run python src/bootstrap.py demo/test_v3_retrieve_http.py
 
 ## References
 
-- [Agentic V3 API Documentation](../api_docs/agentic_v3_api.md)
+- [Memory API Documentation](../api_docs/memory_api.md)
 - [Agentic Retrieval Guide](./agentic_retrieval_guide.md)
 - [Memory Manager Usage Guide](./api_usage_guide.md)
 
