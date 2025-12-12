@@ -11,7 +11,7 @@ from core.di.decorators import component
 from core.lifespan.lifespan_interface import LifespanProvider
 from core.oxm.es.doc_base import DocBase
 from core.oxm.es.es_utils import EsIndexInitializer
-from component.elasticsearch_client_factory import ElasticsearchClientFactory
+from core.component.elasticsearch_client_factory import ElasticsearchClientFactory
 
 logger = get_logger(__name__)
 

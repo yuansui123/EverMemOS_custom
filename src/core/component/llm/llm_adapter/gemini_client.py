@@ -6,7 +6,7 @@ from google.genai.types import GenerateContentConfig, ContentDict
 from google.genai.types import ThinkingConfig
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage, BaseMessage
 from core.di.decorators import component
-from component.config_provider import ConfigProvider
+from core.component.config_provider import ConfigProvider
 from core.constants.errors import ErrorMessage
 
 

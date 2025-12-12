@@ -12,7 +12,7 @@ from core.di.decorators import component
 from core.lifespan.lifespan_interface import LifespanProvider
 from core.oxm.mongo.document_base import DocumentBase
 from core.di.utils import get_all_subclasses
-from component.mongodb_client_factory import MongoDBClientFactory, MongoDBClientWrapper
+from core.component.mongodb_client_factory import MongoDBClientFactory, MongoDBClientWrapper
 
 
 logger = get_logger(__name__)

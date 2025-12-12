@@ -13,7 +13,7 @@ from core.middleware.database_session_middleware import DatabaseSessionMiddlewar
 from core.middleware.global_exception_handler import global_exception_handler
 from core.middleware.profile_middleware import ProfileMiddleware
 from core.di.utils import get_bean_by_type
-from component.database_connection_provider import DatabaseConnectionProvider
+from core.component.database_connection_provider import DatabaseConnectionProvider
 
 from core.lifespan.lifespan_factory import LifespanFactory
 

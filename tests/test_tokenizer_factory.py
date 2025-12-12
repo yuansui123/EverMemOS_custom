@@ -12,7 +12,7 @@ Usage:
 
 from core.di.utils import get_bean_by_type
 from core.observation.logger import get_logger
-from component.llm.tokenizer.tokenizer_factory import TokenizerFactory, DEFAULT_TIKTOKEN_ENCODINGS
+from core.component.llm.tokenizer.tokenizer_factory import TokenizerFactory, DEFAULT_TIKTOKEN_ENCODINGS
 
 logger = get_logger(__name__)
 

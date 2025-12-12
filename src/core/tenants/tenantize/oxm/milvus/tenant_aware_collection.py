@@ -19,7 +19,7 @@ from core.tenants.tenantize.oxm.milvus.config_utils import (
     get_tenant_aware_collection_name,
 )
 from core.tenants.tenantize.tenant_cache_utils import get_or_compute_tenant_cache
-from component.milvus_client_factory import MilvusClientFactory
+from core.component.milvus_client_factory import MilvusClientFactory
 from core.di.utils import get_bean_by_type
 
 logger = get_logger(__name__)

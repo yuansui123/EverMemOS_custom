@@ -23,9 +23,9 @@ sys.path.append(os.getcwd())
 
 from pymilvus import utility, connections
 from core.di import get_bean_by_type
-from component.redis_provider import RedisProvider
-from component.mongodb_client_factory import MongoDBClientFactory
-from component.elasticsearch_client_factory import ElasticsearchClientFactory
+from core.component.redis_provider import RedisProvider
+from core.component.mongodb_client_factory import MongoDBClientFactory
+from core.component.elasticsearch_client_factory import ElasticsearchClientFactory
 from bootstrap import setup_project_context
 
 

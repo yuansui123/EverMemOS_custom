@@ -11,7 +11,7 @@ from core.context.context import (
     get_current_user_info,
     clear_current_user_context,
 )
-from component.database_session_provider import DatabaseSessionProvider
+from core.component.database_session_provider import DatabaseSessionProvider
 from core.di.decorators import component
 from core.di.utils import get_bean_by_type
 from core.observation.logger import get_logger

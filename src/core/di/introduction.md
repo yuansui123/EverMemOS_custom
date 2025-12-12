@@ -603,7 +603,7 @@ from core.di.decorators import component
 @component("my_component")
 class MyComponent:
     def do_something(self):
-        return "Hello from component"
+        return "Hello from core.component"
 
 # 使用
 comp = get_container().get_bean("my_component")

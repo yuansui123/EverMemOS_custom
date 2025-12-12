@@ -26,7 +26,7 @@ from infra_layer.adapters.out.persistence.document.memory.conversation_meta impo
 from infra_layer.adapters.out.persistence.repository.conversation_meta_raw_repository import (
     ConversationMetaRawRepository,
 )
-from component.redis_provider import RedisProvider
+from core.component.redis_provider import RedisProvider
 
 logger = logging.getLogger(__name__)
 

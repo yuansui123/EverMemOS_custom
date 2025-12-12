@@ -12,7 +12,7 @@ import uuid
 import json, re
 import asyncio
 from core.di.utils import get_bean, get_bean_by_type
-from component.llm.tokenizer.tokenizer_factory import TokenizerFactory
+from core.component.llm.tokenizer.tokenizer_factory import TokenizerFactory
 from common_utils.datetime_utils import (
     from_iso_format as dt_from_iso_format,
 )

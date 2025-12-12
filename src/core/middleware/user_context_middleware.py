@@ -5,7 +5,7 @@ from starlette.types import ASGIApp
 from typing import Callable
 
 from core.context.context import set_current_user_info, clear_current_user_context
-from component.auth_provider import AuthProvider
+from core.component.auth_provider import AuthProvider
 from core.di.utils import get_bean_by_type
 from core.observation.logger import get_logger
 

@@ -12,12 +12,12 @@ from google.genai.types import (
     HarmBlockThreshold,
 )
 from google.genai.types import ThinkingConfig
-from component.llm.llm_adapter.completion import (
+from core.component.llm.llm_adapter.completion import (
     ChatCompletionRequest,
     ChatCompletionResponse,
 )
-from component.llm.llm_adapter.message import MessageRole
-from component.llm.llm_adapter.llm_backend_adapter import LLMBackendAdapter
+from core.component.llm.llm_adapter.message import MessageRole
+from core.component.llm.llm_adapter.llm_backend_adapter import LLMBackendAdapter
 
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 from core.constants.errors import ErrorMessage

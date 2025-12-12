@@ -1,11 +1,11 @@
 from typing import Dict, Any, List, Union, AsyncGenerator
 import os
 import openai
-from component.llm.llm_adapter.completion import (
+from core.component.llm.llm_adapter.completion import (
     ChatCompletionRequest,
     ChatCompletionResponse,
 )
-from component.llm.llm_adapter.llm_backend_adapter import LLMBackendAdapter
+from core.component.llm.llm_adapter.llm_backend_adapter import LLMBackendAdapter
 from core.constants.errors import ErrorMessage
 
 

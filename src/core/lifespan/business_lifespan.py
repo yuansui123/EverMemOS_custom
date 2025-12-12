@@ -10,7 +10,7 @@ from core.di.utils import get_bean_by_type, get_beans_by_type, get_bean
 from core.di.decorators import component
 from core.interface.controller.base_controller import BaseController
 from core.capability.app_capability import ApplicationCapability
-from component.llm.tokenizer.tokenizer_factory import TokenizerFactory
+from core.component.llm.tokenizer.tokenizer_factory import TokenizerFactory
 from .lifespan_interface import LifespanProvider
 
 logger = get_logger(__name__)

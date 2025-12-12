@@ -35,8 +35,8 @@ from infra_layer.adapters.out.persistence.document.memory.conversation_meta impo
 from infra_layer.adapters.out.persistence.repository.conversation_meta_raw_repository import (
     ConversationMetaRawRepository,
 )
-from component.redis_provider import RedisProvider
-from component.timeout_background import timeout_to_background
+from core.context.request.timeout_background import timeout_to_background
+from core.component.redis_provider import RedisProvider
 
 logger = logging.getLogger(__name__)
 

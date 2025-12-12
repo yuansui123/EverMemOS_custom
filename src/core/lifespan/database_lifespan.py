@@ -8,7 +8,7 @@ from typing import Tuple, Any
 from core.observation.logger import get_logger
 from core.di.utils import get_bean_by_type
 from core.di.decorators import component
-from component.database_connection_provider import DatabaseConnectionProvider
+from core.component.database_connection_provider import DatabaseConnectionProvider
 from .lifespan_interface import LifespanProvider
 
 logger = get_logger(__name__)

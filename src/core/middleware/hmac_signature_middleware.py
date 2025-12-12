@@ -11,7 +11,7 @@ from starlette.types import ASGIApp
 from core.authorize.enums import Role
 from core.context.context import set_current_user_info, clear_current_user_context
 from core.observation.logger import get_logger
-from component.redis_provider import RedisProvider
+from core.component.redis_provider import RedisProvider
 from core.di import get_bean_by_type
 
 logger = get_logger(__name__)

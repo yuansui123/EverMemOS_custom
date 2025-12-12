@@ -6,12 +6,12 @@ import os
 import httpx
 from core.di.decorators import service
 
-from component.llm.llm_adapter.completion import (
+from core.component.llm.llm_adapter.completion import (
     ChatCompletionRequest,
     ChatCompletionResponse,
 )
-from component.llm.llm_adapter.message import MessageRole
-from component.llm.llm_adapter.llm_backend_adapter import LLMBackendAdapter
+from core.component.llm.llm_adapter.message import MessageRole
+from core.component.llm.llm_adapter.llm_backend_adapter import LLMBackendAdapter
 from core.constants.errors import ErrorMessage
 
 

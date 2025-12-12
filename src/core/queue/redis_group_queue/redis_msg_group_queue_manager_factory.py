@@ -11,7 +11,7 @@ import asyncio
 from typing import Dict, Optional, Callable, Type
 from core.di.decorators import component
 from core.observation.logger import get_logger
-from component.redis_provider import RedisProvider
+from core.component.redis_provider import RedisProvider
 from .redis_msg_group_queue_manager import RedisGroupQueueManager
 from .redis_group_queue_item import RedisGroupQueueItem, SerializationMode
 

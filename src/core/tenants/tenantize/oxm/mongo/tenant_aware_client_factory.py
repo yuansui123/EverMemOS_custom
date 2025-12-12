@@ -10,7 +10,7 @@ from typing import Optional
 
 from core.observation.logger import get_logger
 from core.di.decorators import component
-from component.mongodb_client_factory import (
+from core.component.mongodb_client_factory import (
     MongoDBClientFactory,
     MongoDBConfig,
     MongoDBClientWrapper,

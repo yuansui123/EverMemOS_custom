@@ -15,8 +15,8 @@ from hashlib import md5
 import bson
 from aiokafka import AIOKafkaProducer
 
-from component.config_provider import ConfigProvider
-from component.kafka_consumer_factory import get_ca_file_path
+from core.component.config_provider import ConfigProvider
+from core.component.kafka_consumer_factory import get_ca_file_path
 from core.di.decorators import component
 from core.observation.logger import get_logger
 from core.di.utils import get_bean_by_type

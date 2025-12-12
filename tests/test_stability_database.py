@@ -16,8 +16,8 @@ os.environ.setdefault("DATABASE_URL", "postgresql://test:test@localhost:5432/tes
 os.environ.setdefault("DB_POOL_SIZE", "5")
 os.environ.setdefault("DB_MAX_OVERFLOW", "3")
 
-from component.database_session_provider import DatabaseSessionProvider
-from component.database_connection_provider import DatabaseConnectionProvider
+from core.component.database_session_provider import DatabaseSessionProvider
+from core.component.database_connection_provider import DatabaseConnectionProvider
 
 
 class TestDatabaseStability:

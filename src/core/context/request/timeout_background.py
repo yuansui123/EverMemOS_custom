@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 from core.observation.logger import get_logger
 from core.di.utils import get_bean_by_type
 from core.context.context import get_current_request
+from core.context.request.app_logic_provider import AppLogicProvider
 
 logger = get_logger(__name__)
 
@@ -119,9 +120,6 @@ def timeout_to_background(
 
         @wraps(func)
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> Union[T, JSONResponse]:
-            # Delayed import to avoid circular dependency
-            from component.app_logic_provider import AppLogicProvider
-
             # Get AppLogicProvider instance
             provider = get_bean_by_type(AppLogicProvider)
             request_id = provider.get_current_request_id()

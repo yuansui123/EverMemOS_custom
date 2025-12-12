@@ -28,8 +28,8 @@ from infra_layer.adapters.out.search.elasticsearch.memory.foresight import (
 )
 from infra_layer.adapters.out.search.elasticsearch.memory.event_log import EventLogDoc
 from core.di import get_bean_by_type
-from component.redis_provider import RedisProvider
-from component.mongodb_client_factory import MongoDBClientFactory
+from core.component.redis_provider import RedisProvider
+from core.component.mongodb_client_factory import MongoDBClientFactory
 
 
 
