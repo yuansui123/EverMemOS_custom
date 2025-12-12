@@ -296,18 +296,6 @@ async def convert_single_message_to_raw_data(
         "data_id": data_id,
     }
 
-    # If these fields exist in input_data, add them to content
-    if "readStatus" in input_data:
-        content["readStatus"] = input_data.get("readStatus")
-    if "notifyType" in input_data:
-        content["notifyType"] = input_data.get("notifyType")
-    if "isReplySuggest" in input_data:
-        content["isReplySuggest"] = input_data.get("isReplySuggest")
-    if "readUpdateTime" in input_data:
-        content["readUpdateTime"] = from_iso_format(
-            input_data.get("readUpdateTime"), ZoneInfo("UTC")
-        )
-
     # Build metadata, including system fields
     metadata = {
         "original_id": data_id,
@@ -374,26 +362,11 @@ async def handle_conversation_format(data: Dict[str, Any]) -> MemorizeRequest:
     # Extract current_time
     current_time = _extract_current_time(data)
 
-    # Extract participants
-    participants = []
-
-    # Calculate split point (80% as historical messages)
-    split_ratio = data.get("split_ratio", 0.8)
-    split_index = int(len(raw_data_list) * split_ratio)
-
-    # Split historical messages and new messages
-    history_raw_data_list = raw_data_list[:split_index]
-    new_raw_data_list = raw_data_list[split_index:]
-
-    # If no new messages, use the last message as new message
-    if not new_raw_data_list and history_raw_data_list:
-        new_raw_data_list = [history_raw_data_list.pop()]
-
     return _create_memorize_request(
-        history_data=history_raw_data_list,
-        new_data=new_raw_data_list,
+        history_data=[],
+        new_data=raw_data_list,
         data_type=RawDataType(data.get(DataFields.RAW_DATA_TYPE, "Conversation")),
-        participants=participants,
+        participants=[],
         group_id=data.get(DataFields.GROUP_ID),
         group_name=data.get("group_name"),
         current_time=current_time,

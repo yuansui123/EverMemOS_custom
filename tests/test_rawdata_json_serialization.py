@@ -352,7 +352,6 @@ class TestRawDataJsonSerialization:
             'create_timestamp',
             'last_update_timestamp',
             'modify_timestamp',
-            'readUpdateTime',
             'created_at',
             'updated_at',
             'joinTime',
@@ -472,7 +471,6 @@ class TestRawDataJsonSerialization:
                 "orgId": "org_456",
                 "speaker_id": "user_001",
                 "msgType": 1,
-                "readUpdateTime": test_time,  # Actual time field
             },
             data_id="conv_001",
             data_type="Conversation",
@@ -492,7 +490,6 @@ class TestRawDataJsonSerialization:
         # Verify time fields are correctly converted
         assert isinstance(restored_data.content["timestamp"], datetime)
         assert isinstance(restored_data.content["updateTime"], datetime)
-        assert isinstance(restored_data.content["readUpdateTime"], datetime)
         assert isinstance(restored_data.metadata["createTime"], datetime)
         assert isinstance(restored_data.metadata["updateTime"], datetime)
 

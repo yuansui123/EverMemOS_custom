@@ -810,14 +810,6 @@ def _convert_memcell_to_document(
                         "msgType": to_string(raw_data_dict.get('msgType', '')),
                         "referList": to_string(raw_data_dict.get('referList', [])),
                         "orgId": to_string(raw_data_dict.get('orgId', '')),
-                        "readStatus": to_string(raw_data_dict.get('readStatus', '')),
-                        "notifyType": to_string(raw_data_dict.get('notifyType', '')),
-                        "isReplySuggest": to_string(
-                            raw_data_dict.get('isReplySuggest', '')
-                        ),
-                        "readUpdateTime": to_string(
-                            raw_data_dict.get('readUpdateTime', '')
-                        ),
                     },
                 }
 
