@@ -255,7 +255,7 @@ async def _trigger_profile_extraction(
         import os
 
         # Get the number of memcells in the current cluster
-        cluster_memcell_count = cluster_state.cluster_counts.get(cluster_id)
+        cluster_memcell_count = cluster_state.cluster_counts.get(cluster_id) or 0
         if cluster_memcell_count < config.profile_min_memcells:
             logger.debug(
                 f"[Profile] Cluster {cluster_id} has only {cluster_memcell_count} memcells "
