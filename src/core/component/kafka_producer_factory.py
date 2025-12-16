@@ -85,6 +85,7 @@ def get_default_producer_config(
     max_batch_size = int(get_env("MAX_BATCH_SIZE", "16384"))
     max_request_size = int(get_env("MAX_REQUEST_SIZE", "1048576"))
     request_timeout_ms = int(get_env("REQUEST_TIMEOUT_MS", "30000"))
+    retry_backoff_ms = int(get_env("RETRY_BACKOFF_MS", "500"))  # 重试退避时间
 
     config = {
         "kafka_servers": kafka_servers,
@@ -95,6 +96,7 @@ def get_default_producer_config(
         "max_batch_size": max_batch_size,
         "max_request_size": max_request_size,
         "request_timeout_ms": request_timeout_ms,
+        "retry_backoff_ms": retry_backoff_ms,
     }
 
     prefix_info = f" (prefix: {env_prefix})" if env_prefix else ""
@@ -107,6 +109,7 @@ def get_default_producer_config(
     logger.info("  Batch size (max_batch_size): %s bytes", max_batch_size)
     logger.info("  Max request (max_request_size): %s bytes", max_request_size)
     logger.info("  Request timeout (request_timeout_ms): %s ms", request_timeout_ms)
+    logger.info("  Retry backoff (retry_backoff_ms): %s ms", retry_backoff_ms)
 
     return config
 
@@ -234,7 +237,9 @@ class KafkaProducerFactory:
         linger_ms: int = 0,
         max_request_size: int = 1048576,
         request_timeout_ms: int = 30000,
+        retry_backoff_ms: int = 500,
         value_serializer: Optional[callable] = None,
+        start_timeout: float = 10.0,
     ) -> AIOKafkaProducer:
         """
         Create AIOKafkaProducer instance
@@ -248,10 +253,15 @@ class KafkaProducerFactory:
             linger_ms: Send delay (milliseconds), used for batch sending
             max_request_size: Maximum bytes per request
             request_timeout_ms: Request timeout (milliseconds)
+            retry_backoff_ms: Retry backoff (milliseconds)
             value_serializer: Value serializer, default is bson_json_serializer
+            start_timeout: Timeout for starting producer (seconds), 0 to skip
 
         Returns:
             AIOKafkaProducer instance
+
+        Raises:
+            ConnectionError: If cannot connect to Kafka within timeout
         """
         # Create SSL context
         ssl_context = None
@@ -276,12 +286,34 @@ class KafkaProducerFactory:
             linger_ms=linger_ms,
             max_request_size=max_request_size,
             request_timeout_ms=request_timeout_ms,
+            retry_backoff_ms=retry_backoff_ms,
             security_protocol="SSL" if ca_file_path else "PLAINTEXT",
             ssl_context=ssl_context,
         )
 
         producer_name = get_producer_name(kafka_servers)
-        logger.info("Created AIOKafkaProducer for %s", producer_name)
+
+        # Start producer and verify connection
+        if start_timeout > 0:
+            try:
+                await asyncio.wait_for(producer.start(), timeout=start_timeout)
+                brokers = producer.client.cluster.brokers()
+                logger.info(
+                    "Producer %s started, connected to %d broker(s)",
+                    producer_name,
+                    len(brokers) if brokers else 0,
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    "Cannot connect to Kafka %s within %ss, producer may not work",
+                    kafka_servers,
+                    start_timeout,
+                )
+            except Exception as e:
+                logger.error("Failed to start Kafka producer %s: %s", producer_name, e)
+        else:
+            logger.info("Created AIOKafkaProducer for %s (not started)", producer_name)
+
         return producer
 
     async def get_producer(
@@ -381,6 +413,7 @@ class KafkaProducerFactory:
             max_batch_size=config.get("max_batch_size", 16384),
             max_request_size=config.get("max_request_size", 1048576),
             request_timeout_ms=config.get("request_timeout_ms", 30000),
+            retry_backoff_ms=config.get("retry_backoff_ms", 500),
         )
 
     async def remove_producer(self, kafka_servers: List[str]) -> bool:
