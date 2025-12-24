@@ -17,7 +17,9 @@ from infra_layer.adapters.out.persistence.document.memory.conversation_meta impo
 logger = logging.getLogger(__name__)
 
 # Allowed scene enum values
-ALLOWED_SCENES = ["assistant", "companion"]
+# - assistant/companion: 1:1 assistant-like conversations
+# - group_chat: multi-participant/work-group conversations
+ALLOWED_SCENES = ["assistant", "companion", "group_chat"]
 
 
 @repository("conversation_meta_raw_repository", primary=True)

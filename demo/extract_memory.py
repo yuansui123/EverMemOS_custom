@@ -1,6 +1,7 @@
 import asyncio
 import json
 from pathlib import Path
+from datetime import datetime, timezone
 import httpx
 from demo.tools.clear_all_data import clear_all_memories
 from common_utils.language_utils import get_prompt_language
@@ -10,7 +11,7 @@ def load_conversation_data(file_path: str) -> tuple:
     """Load conversation data from JSON file
     
     Returns:
-        tuple: (messages, group_id, group_name)
+        tuple: (messages, group_id, group_name, conversation_meta)
     """
     data_file = Path(file_path)
     if not data_file.exists():
@@ -34,7 +35,68 @@ def load_conversation_data(file_path: str) -> tuple:
     print(f"group_id: {group_id}")
     print(f"group_name: {group_name}")
     
-    return messages, group_id, group_name
+    return messages, group_id, group_name, conversation_meta
+
+
+async def upsert_conversation_meta(
+    client: httpx.AsyncClient,
+    base_url: str,
+    conversation_meta: dict,
+    scene: str,
+    messages: list,
+    group_id: str,
+    group_name: str,
+) -> None:
+    """Upsert conversation meta to MongoDB via API.
+
+    Note: server-side extraction reads scene from conversation_metas by group_id.
+    """
+    if scene not in {"assistant", "companion", "group_chat"}:
+        raise ValueError("profile_scene must be 'assistant', 'companion', or 'group_chat'")
+
+    # Best-effort fill required fields
+    created_at = conversation_meta.get("created_at")
+    if not created_at:
+        created_at = (
+            messages[0].get("create_time")
+            if messages and isinstance(messages[0], dict)
+            else None
+        ) or datetime.now(timezone.utc).isoformat()
+
+    user_details = conversation_meta.get("user_details") or {}
+    if not user_details:
+        # Fallback: derive minimal user_details from message senders
+        for m in messages:
+            sender = m.get("sender")
+            if not sender:
+                continue
+            user_details[sender] = {
+                "full_name": m.get("sender_name") or sender,
+                "role": "user",
+                "extra": {},
+            }
+
+    payload = {
+        "version": conversation_meta.get("version", "1.0"),
+        "scene": scene,
+        "scene_desc": conversation_meta.get("scene_desc", {}),
+        "name": conversation_meta.get("name", group_name) or group_name or "unknown",
+        "description": conversation_meta.get("description", ""),
+        "group_id": conversation_meta.get("group_id", group_id) or group_id,
+        "created_at": created_at,
+        "default_timezone": conversation_meta.get("default_timezone", "UTC"),
+        "user_details": user_details,
+        "tags": conversation_meta.get("tags", []),
+    }
+
+    url = f"{base_url}/api/v1/memories/conversation-meta"
+    resp = await client.post(url, json=payload, headers={"Content-Type": "application/json"})
+    if resp.status_code != 200:
+        print(f"⚠️  Failed to save conversation-meta: HTTP {resp.status_code}")
+        print(resp.text[:300])
+    else:
+        result = resp.json().get("result", {})
+        print(f"✓ conversation-meta saved: group_id={result.get('group_id')}, scene={result.get('scene')}")
 
 
 def prompt_clear_data() -> bool:
@@ -88,18 +150,29 @@ async def test_memorize_api():
     print(f"\n📌 Language setting: MEMORY_LANGUAGE={language}")
     print(f"   (Set via environment variable, affects both data file and server prompts)")
 
+    # profile_scene = "assistant"
+    profile_scene = "group_chat"
+
     if language == "zh":
-        data_file = "data/assistant_chat_zh.json"
+        if profile_scene == "assistant":
+            data_file = "data/assistant_chat_zh.json"
+        else:
+            data_file = "data/group_chat_zh.json"
     else:
-        data_file = "data/assistant_chat_en.json"
+        if profile_scene == "assistant":
+            data_file = "data/assistant_chat_en.json"
+        else:
+            data_file = "data/group_chat_en.json"
         # data_file = "data/group_chat_en.json"
     try:
-        test_messages, group_id, group_name = load_conversation_data(data_file)
+        test_messages, group_id, group_name, conversation_meta = load_conversation_data(
+            data_file
+        )
     except FileNotFoundError as e:
         print(f"❌ Error: {e}")
         return False
     
-    profile_scene = "assistant"
+    
     
     print(f"\n📤 Sending {len(test_messages)} messages to V1 API")
     print(f"   URL: {memorize_url}")
@@ -115,11 +188,19 @@ async def test_memorize_api():
     total_processing = 0
     
     async with httpx.AsyncClient(timeout=500.0) as client:
+        # Save conversation-meta first (scene is read from MongoDB during extraction)
+        await upsert_conversation_meta(
+            client=client,
+            base_url=base_url,
+            conversation_meta=conversation_meta,
+            scene=profile_scene,
+            messages=test_messages,
+            group_id=group_id,
+            group_name=group_name,
+        )
+
         for idx, message in enumerate(test_messages, 1):
             print(f"[{idx}/{len(test_messages)}] {message['sender']}: {message['content'][:40]}...")
-            
-            # Add scene field to each message
-            message['scene'] = profile_scene
             
             try:
                 response = await client.post(
