@@ -34,8 +34,7 @@ class CustomVectorizeConfig:
     batch_size: int = 10
     max_concurrent_requests: int = 5
     encoding_format: str = "float"
-    dimensions: int = 1024
-    support_dimensions_param: bool = False  # vLLM often doesn't support this
+    dimensions: int = 1024  # Client-side truncation target
 
     def __post_init__(self):
         """Load configuration from environment variables"""
@@ -132,12 +131,8 @@ class CustomVectorizeService(VectorizeServiceInterface):
                         "model": self.config.model,
                         "input": formatted_texts,
                         "encoding_format": self.config.encoding_format,
+                        # Never pass dimensions parameter - always use client-side truncation
                     }
-
-                    # Only add dimensions if supported by the custom service
-                    # Many vLLM deployments don't support the dimensions parameter
-                    if self.config.support_dimensions_param and self.config.dimensions > 0:
-                        request_kwargs["dimensions"] = self.config.dimensions
 
                     response = await self.client.embeddings.create(**request_kwargs)
                     return response
@@ -161,17 +156,16 @@ class CustomVectorizeService(VectorizeServiceInterface):
         for item in response.data:
             emb = np.array(item.embedding, dtype=np.float32)
 
-            # Client-side truncation if needed (for services that don't support dimensions param)
+            # Client-side truncation (simple truncation without re-normalization)
             if (
                 self.config.dimensions
                 and self.config.dimensions > 0
                 and len(emb) > self.config.dimensions
             ):
+                logger.debug(
+                    f"Client-side truncation: {len(emb)}D → {self.config.dimensions}D"
+                )
                 emb = emb[: self.config.dimensions]
-                # Re-normalize after truncation to maintain unit length
-                norm = np.linalg.norm(emb)
-                if norm > 0:
-                    emb = emb / norm
 
             embeddings.append(emb)
         return embeddings

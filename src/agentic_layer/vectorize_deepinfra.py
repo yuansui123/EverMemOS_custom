@@ -155,19 +155,6 @@ class DeepInfraVectorizeService(VectorizeServiceInterface):
         embeddings = []
         for item in response.data:
             emb = np.array(item.embedding, dtype=np.float32)
-
-            # Client-side truncation if needed
-            if (
-                self.config.dimensions
-                and self.config.dimensions > 0
-                and len(emb) > self.config.dimensions
-            ):
-                emb = emb[: self.config.dimensions]
-                # Re-normalize after truncation
-                norm = np.linalg.norm(emb)
-                if norm > 0:
-                    emb = emb / norm
-
             embeddings.append(emb)
         return embeddings
 
