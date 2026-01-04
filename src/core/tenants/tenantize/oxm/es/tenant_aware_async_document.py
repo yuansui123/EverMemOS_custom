@@ -121,7 +121,10 @@ class TenantAwareAsyncDocument(AliasSupportDoc):
 
             # Generate a unique connection alias based on connection parameters
             cache_key = get_es_connection_cache_key(es_config)
-            return f"tenant_{cache_key}"
+            using = f"tenant_{cache_key}"
+            # es connection is registered in _register_connection
+            cls._ensure_connection_registered(using)
+            return using
 
         return get_or_compute_tenant_cache(
             patch_key=TenantPatchKey.ES_CONNECTION_CACHE_KEY,
