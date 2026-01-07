@@ -12,9 +12,6 @@ Usage:
     
     # Or use environment variable METRICS_PORT
     start_metrics_server()  # reads from METRICS_PORT or defaults to 9090
-    
-    # Stop the server
-    stop_metrics_server()
 
 Benefits:
     - Security: Metrics endpoint can be firewalled separately
@@ -23,15 +20,13 @@ Benefits:
 """
 import os
 import logging
-import threading
 from typing import Optional
-from prometheus_client import start_http_server, REGISTRY
+from prometheus_client import start_http_server
 from .registry import get_metrics_registry
 
 logger = logging.getLogger(__name__)
 
 # Global server state
-_metrics_server_thread: Optional[threading.Thread] = None
 _metrics_server_started: bool = False
 
 
