@@ -221,7 +221,7 @@ class EventLog(BaseMemory):
     time: Optional[str] = None
     atomic_fact: Optional[Union[str, List[str]]] = None
     fact_embeddings: Optional[List[List[float]]] = None
-    parent_type: str = ParentType.MEMCELL.value
+    parent_type: Optional[str] = None
     parent_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
@@ -262,7 +262,7 @@ class Foresight(BaseMemory):
     start_time: Optional[str] = None
     end_time: Optional[str] = None
     duration_days: Optional[int] = None
-    parent_type: str = ParentType.MEMCELL.value
+    parent_type: Optional[str] = None
     parent_id: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
