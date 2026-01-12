@@ -7,6 +7,7 @@ from datetime import datetime
 from elasticsearch.dsl import MetaField, AsyncDocument, field as e_field
 from common_utils.datetime_utils import to_timezone
 from core.oxm.es.es_utils import generate_index_name, get_index_ns
+from core.oxm.es.mapping_templates import DYNAMIC_TEMPLATES
 from elasticsearch import AsyncElasticsearch
 
 
@@ -213,6 +214,12 @@ def AliasDoc(doc_name: str, number_of_shards: int = 2) -> Type[AsyncDocument]:
             }
 
         class Meta:
-            dynamic = MetaField("strict")
+            dynamic = MetaField("true")
+            # Disable date auto-detection to prevent "2023/10/01" from being incorrectly converted and causing subsequent errors
+            date_detection = MetaField(False)
+            # Disable numeric detection to prevent string numbers from being confused
+            numeric_detection = MetaField(False)
+            # Dynamic mapping rules based on field suffixes (see mapping_templates.py)
+            dynamic_templates = MetaField(DYNAMIC_TEMPLATES)
 
     return GeneratedAliasSupportDoc

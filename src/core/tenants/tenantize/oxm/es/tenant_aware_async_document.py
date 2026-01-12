@@ -21,6 +21,7 @@ from core.tenants.tenantize.oxm.es.config_utils import (
 )
 from core.tenants.tenantize.tenant_cache_utils import get_or_compute_tenant_cache
 from core.oxm.es.doc_base import AliasSupportDoc
+from core.oxm.es.mapping_templates import DYNAMIC_TEMPLATES
 
 logger = get_logger(__name__)
 
@@ -408,6 +409,12 @@ def TenantAwareAliasDoc(
 
         class Meta:
             dynamic = MetaField("true")
+            # Disable date auto-detection to prevent "2023/10/01" from being incorrectly converted and causing subsequent errors
+            date_detection = MetaField(False)
+            # Disable numeric detection to prevent string numbers from being confused
+            numeric_detection = MetaField(False)
+            # Dynamic mapping rules based on field suffixes (see mapping_templates.py)
+            dynamic_templates = MetaField(DYNAMIC_TEMPLATES)
 
         @classmethod
         def get_original_index_name(cls) -> str:
