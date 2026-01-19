@@ -41,8 +41,8 @@ class ConversationMeta(TypedDict, total=False):
     """Conversation meta information
 
     Attributes:
-        scene: Scene type, supports "company" (human-AI assistant conversation) or "work" (work group chat) (optional)
-        scene_desc: Scene description information, such as company scene can contain description field to describe the conversation scene (optional)
+        scene: Scene type, supports "assistant" (human-AI assistant conversation) or "group_chat" (work group chat) (optional)
+        scene_desc: Scene description information, such as assistant scene can contain description field to describe the conversation scene (optional)
         name: Group chat name
         description: Group chat description
         group_id: Group chat unique identifier (optional)

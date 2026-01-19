@@ -1,6 +1,5 @@
 # Demo - EverMemOS Interactive Examples
 
-[English](README.md) | [简体中文](README_zh.md)
 
 This directory contains interactive demos showcasing the core functionality of EverMemOS.
 
@@ -36,7 +35,6 @@ demo/
 ├── chat_history/                # 📁 Output: Chat logs (auto-generated)
 │
 ├── README.md                    # 📖 Documentation (English)
-└── README_zh.md                 # 📖 Documentation (Chinese)
 ```
 
 **Notes**:

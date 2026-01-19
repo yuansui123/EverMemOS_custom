@@ -28,13 +28,13 @@ For the complete format definition, please refer to [`group_chat_format.py`](../
 
 Two core conversation scenes are supported:
 
-- **company**: Human-AI assistant conversation scene, one-on-one dialogue, AI acts as a personal assistant
-- **work**: Work group chat scene, multi-person group chat, team collaboration
+- **assistant**: Human-AI assistant conversation scene, one-on-one dialogue, AI acts as a personal assistant
+- **group_chat**: Work group chat scene, multi-person group chat, team collaboration
 
-**Company Scene Example**:
+**Assistant Scene Example**:
 ```json
 "conversation_meta": {
-  "scene": "company",
+  "scene": "assistant",
   "scene_desc": {
     "description": "User and AI assistant conversation about Beijing tourism, health management, and sports rehabilitation"
   },
@@ -42,19 +42,19 @@ Two core conversation scenes are supported:
 }
 ```
 
-**Work Scene Example**:
+**Group Chat Scene Example**:
 ```json
 "conversation_meta": {
-  "scene": "work",
+  "scene": "group_chat",
   "scene_desc": {},
   ...
 }
 ```
 
-- **scene**: Scene type identifier (`company` or `work`)
+- **scene**: Scene type identifier (`assistant` or `group_chat`)
 - **scene_desc**: Scene description information
-  - Company scene: Contains `description` field, describing the conversation scene
-  - Work scene: Usually an empty object, representing a multi-person collaboration scene
+  - Assistant scene: Contains `description` field, describing the conversation scene
+  - Group chat scene: Usually an empty object, representing a multi-person collaboration scene
 
 ### 3. User Details
 

@@ -1,9 +1,5 @@
 # EverMemOS Evaluation Framework
 
-<p>
-  <a href="README.md">English</a> | <a href="README_zh.md">简体中文</a>
-</p>
-
 A unified, modular evaluation framework for benchmarking memory systems on standard datasets.
 
 ## 📖 Overview
