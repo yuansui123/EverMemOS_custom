@@ -149,8 +149,6 @@ The `--scene` parameter specifies the memory extraction strategy:
 
 **conversation_list:**
 - `sender_name` (string) - Override sender's display name
-- `mentioned_user` (array) - List of mentioned user IDs
-- Custom metadata fields
 
 ---
 
@@ -220,7 +218,6 @@ The `--scene` parameter specifies the memory extraction strategy:
       "create_time": "2025-02-01T18:00:00-05:00",
       "sender": "mom",
       "content": "Dinner is ready! Come down please.",
-      "mentioned_user": ["dad", "daughter"]
     },
     {
       "message_id": "fam_002",
