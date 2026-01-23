@@ -380,14 +380,14 @@ class MemoryController(BaseController):
             - hybrid: hybrid retrieval (keyword + vector)
             - rrf: RRF fusion retrieval
             - agentic: LLM-guided multi-round retrieval
-        - **top_k** (optional): Max results (default: 10, max: 100)
+        - **radius** (optional): Similarity threshold (0.0-1.0) for vector search
         - **memory_types** (optional): List of memory types to search
             - episodic_memory
             - foresight
             - event_log
         - **start_time** (optional): Start time (ISO 8601)
         - **end_time** (optional): End time (ISO 8601)
-        - **radius** (optional): Similarity threshold (0.0-1.0) for vector search
+        - **top_k** (optional): Max results (default: 10, max: 100)
         - **include_metadata** (optional): Whether to include metadata (default: true)
         
         ## Result description:
