@@ -280,8 +280,6 @@ class ConvMemCellExtractor(MemCellExtractor):
         conversation_history: list[dict[str, str]],
         new_messages: list[dict[str, str]],
     ) -> BoundaryDetectionResult:
-        start_time = time.perf_counter()
-        
         if not conversation_history:
             return BoundaryDetectionResult(
                 should_end=False,
@@ -330,7 +328,6 @@ class ConvMemCellExtractor(MemCellExtractor):
                     record_boundary_detection(
                         result=detection_result,
                         trigger_type='llm',
-                        duration_seconds=time.perf_counter() - start_time,
                     )
                     return result
                 else:
@@ -349,11 +346,7 @@ class ConvMemCellExtractor(MemCellExtractor):
         logger.error(
             f"[ConversationEpisodeBuilder] All 5 retries exhausted for boundary detection, returning default (should_end=False)"
         )
-        record_boundary_detection(
-            result='error',
-            trigger_type='llm',
-            duration_seconds=time.perf_counter() - start_time,
-        )
+  
         return BoundaryDetectionResult(
             should_end=False,
             should_wait=True,
@@ -430,7 +423,6 @@ class ConvMemCellExtractor(MemCellExtractor):
 
         if needs_force_split and len(history_message_dict_list) >= 2:
             # Force split: create MemCell from history, new message starts next accumulation
-            force_split_start = time.perf_counter()
             trigger_type = 'token_limit' if total_tokens >= self.hard_token_limit else 'message_limit'
             
             logger.debug(
@@ -458,7 +450,6 @@ class ConvMemCellExtractor(MemCellExtractor):
             record_boundary_detection(
                 result='force_split',
                 trigger_type=trigger_type,
-                duration_seconds=time.perf_counter() - force_split_start,
             )
             record_memcell_extracted(trigger_type=trigger_type)
 

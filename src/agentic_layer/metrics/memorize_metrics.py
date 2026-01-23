@@ -109,21 +109,6 @@ Buckets: 1ms, 5ms, 10ms, 25ms, 50ms, 100ms, 250ms, 500ms, 1s, 2.5s, 5s
 """
 
 
-MEMORIZE_MEMORIES_EXTRACTED = Histogram(
-    name='memorize_memories_extracted',
-    description='Number of memories extracted per memorize request',
-    labelnames=[],
-    namespace='evermemos',
-    subsystem='agentic',
-    buckets=(0, 1, 2, 3, 5, 10, 20, 50, 100),
-)
-"""
-Memories extracted per request histogram
-
-Buckets: 0, 1, 2, 3, 5, 10, 20, 50, 100 memories
-"""
-
-
 MEMORIZE_MESSAGES_TOTAL = Counter(
     name='memorize_messages_total',
     description='Total number of messages processed for memorization',
@@ -156,24 +141,6 @@ Boundary detection results counter
 Labels:
 - result: should_end, should_wait, error, force_split
 - trigger_type: llm, token_limit, message_limit, first_message
-"""
-
-
-BOUNDARY_DETECTION_DURATION_SECONDS = Histogram(
-    name='boundary_detection_duration_seconds',
-    description='Duration of boundary detection in seconds',
-    labelnames=['trigger_type'],
-    namespace='evermemos',
-    subsystem='agentic',
-    buckets=HistogramBuckets.ML_INFERENCE,  # LLM inference buckets
-)
-"""
-Boundary detection duration histogram
-
-Labels:
-- trigger_type: llm, token_limit, message_limit, first_message
-
-Buckets: 10ms - 10s for ML inference
 """
 
 
@@ -271,7 +238,6 @@ Buckets: 10ms - 10s for ML inference
 def record_memorize_request(
     status: str,
     duration_seconds: float,
-    memories_extracted: int = 0,
 ) -> None:
     """
     Helper function to record memorize request metrics
@@ -279,13 +245,11 @@ def record_memorize_request(
     Args:
         status: Request status (success, error, accumulated, extracted)
         duration_seconds: Total operation duration in seconds
-        memories_extracted: Number of memories extracted (0 if accumulated)
     
     Example:
         record_memorize_request(
             status='extracted',
             duration_seconds=0.5,
-            memories_extracted=3,
         )
     """
     # Counter
@@ -294,9 +258,6 @@ def record_memorize_request(
     # Duration histogram (use simplified status for duration)
     duration_status = 'success' if status in ('success', 'accumulated', 'extracted') else 'error'
     MEMORIZE_DURATION_SECONDS.labels(status=duration_status).observe(duration_seconds)
-    
-    # Memories extracted histogram
-    MEMORIZE_MEMORIES_EXTRACTED.observe(memories_extracted)
 
 
 def record_memorize_stage(
@@ -356,7 +317,7 @@ def record_memorize_message(status: str, count: int = 1) -> None:
 
 def classify_memorize_error(error: Exception) -> str:
     """
-    Classify error type for metrics
+    Classify error type for metricsx
     
     Args:
         error: Exception instance
@@ -364,24 +325,14 @@ def classify_memorize_error(error: Exception) -> str:
     Returns:
         Error type string for metrics label
     """
-    error_type = type(error).__name__.lower()
-    
-    if 'timeout' in error_type:
-        return 'timeout'
-    elif 'validation' in error_type or 'value' in error_type:
-        return 'validation_error'
-    elif 'connection' in error_type or 'network' in error_type:
-        return 'connection_error'
-    elif 'http' in error_type:
-        return 'http_error'
-    else:
-        return 'unknown'
+    # TODO: Add detailed error classification based on actual scenarios
+    _ = error  # Placeholder for future use
+    return 'error'
 
 
 def record_boundary_detection(
     result: str,
     trigger_type: str,
-    duration_seconds: float,
 ) -> None:
     """
     Helper function to record boundary detection metrics
@@ -389,17 +340,14 @@ def record_boundary_detection(
     Args:
         result: Detection result (should_end, should_wait, error, force_split)
         trigger_type: What triggered the detection (llm, token_limit, message_limit, first_message)
-        duration_seconds: Detection duration in seconds
     
     Example:
         record_boundary_detection(
             result='should_end',
             trigger_type='llm',
-            duration_seconds=1.5,
         )
     """
     BOUNDARY_DETECTION_TOTAL.labels(result=result, trigger_type=trigger_type).inc()
-    BOUNDARY_DETECTION_DURATION_SECONDS.labels(trigger_type=trigger_type).observe(duration_seconds)
 
 
 def record_memcell_extracted(trigger_type: str) -> None:

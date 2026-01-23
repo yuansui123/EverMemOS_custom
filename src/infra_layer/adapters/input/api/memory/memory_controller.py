@@ -235,7 +235,6 @@ class MemoryController(BaseController):
             record_memorize_request(
                 status=status,
                 duration_seconds=time.perf_counter() - start_time,
-                memories_extracted=memory_count,
             )
 
             return {
@@ -254,7 +253,6 @@ class MemoryController(BaseController):
             record_memorize_request(
                 status='error',
                 duration_seconds=time.perf_counter() - start_time,
-                memories_extracted=0,
             )
             raise HTTPException(status_code=400, detail=str(e)) from e
         except HTTPException:
@@ -262,7 +260,6 @@ class MemoryController(BaseController):
             record_memorize_request(
                 status='error',
                 duration_seconds=time.perf_counter() - start_time,
-                memories_extracted=0,
             )
             raise
         except Exception as e:
@@ -272,7 +269,6 @@ class MemoryController(BaseController):
             record_memorize_request(
                 status='error',
                 duration_seconds=time.perf_counter() - start_time,
-                memories_extracted=0,
             )
             raise HTTPException(
                 status_code=500, detail="Failed to store memory, please try again later"

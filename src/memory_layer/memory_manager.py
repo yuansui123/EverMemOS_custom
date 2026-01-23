@@ -165,40 +165,40 @@ class MemoryManager:
         status = 'success'
         
         try:
-            # Dispatch based on memory_type enum
-            match memory_type:
-                case MemoryType.EPISODIC_MEMORY:
+        # Dispatch based on memory_type enum
+        match memory_type:
+            case MemoryType.EPISODIC_MEMORY:
                     result = await self._extract_episode(memcell, user_id, group_id)
 
-                case MemoryType.FORESIGHT:
+            case MemoryType.FORESIGHT:
                     result = await self._extract_foresight(
-                        memcell, user_id=user_id, group_id=group_id
-                    )
+                    memcell, user_id=user_id, group_id=group_id
+                )
 
-                case MemoryType.EVENT_LOG:
+            case MemoryType.EVENT_LOG:
                     result = await self._extract_event_log(
-                        memcell, user_id=user_id, group_id=group_id
-                    )
+                    memcell, user_id=user_id, group_id=group_id
+                )
 
-                case MemoryType.PROFILE:
+            case MemoryType.PROFILE:
                     result = await self._extract_profile(
-                        memcell, user_id, group_id, old_memory_list
-                    )
+                    memcell, user_id, group_id, old_memory_list
+                )
 
-                case MemoryType.GROUP_PROFILE:
+            case MemoryType.GROUP_PROFILE:
                     result = await self._extract_group_profile(
-                        memcell,
-                        user_id,
-                        group_id,
-                        group_name,
-                        old_memory_list,
-                        user_organization,
-                    )
+                    memcell,
+                    user_id,
+                    group_id,
+                    group_name,
+                    old_memory_list,
+                    user_organization,
+                )
 
-                case _:
-                    logger.warning(f"[MemoryManager] Unknown memory_type: {memory_type}")
+            case _:
+                logger.warning(f"[MemoryManager] Unknown memory_type: {memory_type}")
                     status = 'error'
-                    return None
+                return None
             
             # Determine status based on result
             if result is None:
