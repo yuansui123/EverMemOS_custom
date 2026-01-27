@@ -28,8 +28,6 @@
 [API Reference][api-docs] •
 [Demo][demo-section]
 
-[![README in English][lang-en-badge]][lang-en-readme]
-[![简体中文][lang-zh-badge]][lang-zh-readme]
 
 </div>
 
