@@ -10,9 +10,11 @@ Usage:
     python debug_view_databases.py --detail           # Show detailed data (including samples)
 """
 
-import asyncio
-import os
 import sys
+import os
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', 'src'))
+
+import asyncio
 from common_utils.datetime_utils import get_now_with_timezone
 from pymongo import AsyncMongoClient
 from pymilvus import connections, Collection, utility
@@ -65,12 +67,15 @@ async def check_mongodb(detail: bool = False):
     print_section("MongoDB Data")
 
     try:
-        # Connection Config (No Auth)
-        mongo_host = os.getenv('MONGO_HOST', 'localhost')
-        mongo_port = int(os.getenv('MONGO_PORT', '27017'))
+        # Connection Config
+        mongo_host = os.getenv('MONGO_HOST', os.getenv('MONGODB_HOST', 'localhost'))
+        mongo_port = int(os.getenv('MONGO_PORT', os.getenv('MONGODB_PORT', '27017')))
+        mongo_user = os.getenv('MONGODB_USERNAME', 'admin')
+        mongo_pass = os.getenv('MONGODB_PASSWORD', 'memsys123')
+        mongo_db = os.getenv('MONGODB_DATABASE', 'memsys')
 
-        client = AsyncMongoClient(f'mongodb://{mongo_host}:{mongo_port}')
-        db = client['memsys']
+        client = AsyncMongoClient(f'mongodb://{mongo_user}:{mongo_pass}@{mongo_host}:{mongo_port}/{mongo_db}?authSource=admin')
+        db = client[mongo_db]
 
         print_success(f"Connected to MongoDB: {mongo_host}:{mongo_port}")
 

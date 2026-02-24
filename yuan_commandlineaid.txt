@@ -1,0 +1,31 @@
+# View memcells
+docker exec -it memsys-mongodb mongosh -u admin -p memsys123 --authenticationDatabase admin memsys
+Then inside the shell:
+
+// List all collections
+db.getCollectionNames()
+
+// Count memcells
+db.memcells.countDocuments()
+
+// View all memcells
+db.memcells.find().pretty()
+
+// View extracted episodes (the narrative memories)
+db.episodic_memory.find({}, {subject:1, episode:1, summary:1, timestamp:1}).pretty()
+
+// View foresights
+db.foresight_records.find().pretty()
+
+// View cluster state
+db.cluster_states.find().pretty()
+
+
+# View all three backends
+uv run python demo/tools/debug_view_databases.py --detail
+
+# Clear all data
+uv run python demo/tools/clear_all_data.py
+
+# Start the app
+uv run python src/run.py
